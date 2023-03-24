@@ -1,0 +1,83 @@
+{
+  "project_info": {
+    "project_number": "0",
+    "firebase_url": "https://",
+    "project_id": "0",
+    "storage_bucket": "0"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "0",
+        "android_client_info": {
+          "package_name": "chat.rox.demo"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "0",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "0",
+              "client_type": 3
+            },
+            {
+              "client_id": "0",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "0"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "0",
+        "android_client_info": {
+          "package_name": "chat.rox.demo"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "0",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "0",
+              "client_type": 3
+            },
+            {
+              "client_id": "0",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "0"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
