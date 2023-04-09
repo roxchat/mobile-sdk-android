@@ -262,7 +262,7 @@ public class RoxActionsImpl implements RoxActions {
             public Call<UploadResponse> makeRequest(AuthData authData) {
                 return rox.uploadFile(
                         MultipartBody.Part.createFormData(
-                                "rox_upload_file",
+                                "roxchat_upload_file",
                                 filename,
                                 body),
                         CHAT_MODE_ONLINE,
