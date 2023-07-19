@@ -1,6 +1,9 @@
 package chat.rox.android.demo;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -11,6 +14,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.Fragment;
 
 import chat.rox.android.sdk.RoxSession;
@@ -22,7 +26,6 @@ public class MainFragment extends Fragment {
     private MainFragmentDelegate delegate;
 
     public interface MainFragmentDelegate {
-
         void onOpenChat();
 
         void onOpenSettings();
@@ -41,6 +44,13 @@ public class MainFragment extends Fragment {
         ViewGroup container,
         Bundle savedInstanceState) {
 
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(requireActivity(), new String[] { Manifest.permission.POST_NOTIFICATIONS }, 0);
+            }
+        }
+
         View rootView = inflater.inflate(R.layout.fragment_main, container, false);
 
         initNewChatButton(rootView);
@@ -50,7 +60,6 @@ public class MainFragment extends Fragment {
 
         return rootView;
     }
-
 
     public void setRoxSession(RoxSession roxSession) {
         session = roxSession;

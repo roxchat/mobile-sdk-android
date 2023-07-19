@@ -3,7 +3,7 @@
     <item android:id="@android:id/background"
         android:gravity="center_vertical|fill_horizontal">
         <shape android:shape="rectangle"
-            android:tint="@color/colorPrimaryDark">
+            android:tint="@color/rox_primary_dark">
             <corners android:radius="4dp"/>
         </shape>
     </item>
@@ -14,7 +14,7 @@
                 <corners android:radius="4dp"/>
                 <gradient
                     android:startColor="@color/colorPrimary"
-                    android:endColor="@color/colorAccent" />
+                    android:endColor="@color/rox_color_accent" />
             </shape>
         </scale>
     </item>

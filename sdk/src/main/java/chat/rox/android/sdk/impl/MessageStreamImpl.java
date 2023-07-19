@@ -3,31 +3,6 @@ package chat.rox.android.sdk.impl;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import chat.rox.android.sdk.Department;
-import chat.rox.android.sdk.Message;
-import chat.rox.android.sdk.MessageListener;
-import chat.rox.android.sdk.MessageStream;
-import chat.rox.android.sdk.MessageTracker;
-import chat.rox.android.sdk.Operator;
-import chat.rox.android.sdk.Survey;
-import chat.rox.android.sdk.UploadedFile;
-import chat.rox.android.sdk.impl.backend.DefaultCallback;
-import chat.rox.android.sdk.impl.backend.LocationSettingsImpl;
-import chat.rox.android.sdk.impl.backend.SendKeyboardErrorListener;
-import chat.rox.android.sdk.impl.backend.SendOrDeleteMessageInternalCallback;
-import chat.rox.android.sdk.impl.backend.SurveyFinishCallback;
-import chat.rox.android.sdk.impl.backend.SurveyQuestionCallback;
-import chat.rox.android.sdk.impl.backend.RoxActions;
-import chat.rox.android.sdk.impl.backend.RoxInternalError;
-import chat.rox.android.sdk.impl.items.ChatItem;
-import chat.rox.android.sdk.impl.items.DepartmentItem;
-import chat.rox.android.sdk.impl.items.OnlineStatusItem;
-import chat.rox.android.sdk.impl.items.RatingItem;
-import chat.rox.android.sdk.impl.items.SurveyItem;
-import chat.rox.android.sdk.impl.items.VisitSessionStateItem;
-import chat.rox.android.sdk.impl.items.delta.DeltaFullUpdate;
-import chat.rox.android.sdk.impl.items.responses.SearchResponse;
-
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -41,6 +16,34 @@ import java.util.regex.Pattern;
 
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
+import chat.rox.android.sdk.Department;
+import chat.rox.android.sdk.Message;
+import chat.rox.android.sdk.MessageListener;
+import chat.rox.android.sdk.MessageStream;
+import chat.rox.android.sdk.MessageTracker;
+import chat.rox.android.sdk.Operator;
+import chat.rox.android.sdk.Survey;
+import chat.rox.android.sdk.UploadedFile;
+import chat.rox.android.sdk.impl.backend.LocationSettingsImpl;
+import chat.rox.android.sdk.impl.backend.SendKeyboardErrorListener;
+import chat.rox.android.sdk.impl.backend.RoxActions;
+import chat.rox.android.sdk.impl.backend.RoxInternalError;
+import chat.rox.android.sdk.impl.backend.callbacks.DefaultCallback;
+import chat.rox.android.sdk.impl.backend.callbacks.SendOrDeleteMessageInternalCallback;
+import chat.rox.android.sdk.impl.backend.callbacks.SurveyFinishCallback;
+import chat.rox.android.sdk.impl.backend.callbacks.SurveyQuestionCallback;
+import chat.rox.android.sdk.impl.items.AccountConfigItem;
+import chat.rox.android.sdk.impl.items.ChatItem;
+import chat.rox.android.sdk.impl.items.DepartmentItem;
+import chat.rox.android.sdk.impl.items.LocationSettingsItem;
+import chat.rox.android.sdk.impl.items.OnlineStatusItem;
+import chat.rox.android.sdk.impl.items.RatingItem;
+import chat.rox.android.sdk.impl.items.SurveyItem;
+import chat.rox.android.sdk.impl.items.VisitSessionStateItem;
+import chat.rox.android.sdk.impl.items.delta.DeltaFullUpdate;
+import chat.rox.android.sdk.impl.items.requests.AutocompleteRequest;
+import chat.rox.android.sdk.impl.items.responses.SearchResponse;
+import chat.rox.android.sdk.impl.items.responses.ServerSettingsResponse;
 
 public class MessageStreamImpl implements MessageStream {
     private final AccessChecker accessChecker;
@@ -52,9 +55,11 @@ public class MessageStreamImpl implements MessageStream {
     private final MessageFactories.SendingFactory sendingMessageFactory;
     private @Nullable ChatItem chat;
     private @Nullable Operator currentOperator;
-    private CurrentOperatorChangeListener currentOperatorListener;
+    private ServerSettingsResponse serverSettings;
+    private String location;
+    private List<CurrentOperatorChangeListener> currentOperatorListeners = new ArrayList<>();
     private List<Department> departmentList;
-    private DepartmentListChangeListener departmentListChangeListener;
+    private List<DepartmentListChangeListener> departmentListChangeListeners = new ArrayList<>();
     private @NonNull VisitSessionStateItem visitSessionState = VisitSessionStateItem.UNKNOWN;
     private boolean isProcessingChatOpen;
     private @NonNull ChatItem.ItemChatState lastChatState = ChatItem.ItemChatState.UNKNOWN;
@@ -63,19 +68,16 @@ public class MessageStreamImpl implements MessageStream {
     private OnlineStatusChangeListener onlineStatusChangeListener;
     private MessageFactories.OperatorFactory operatorFactory;
     private SurveyFactory surveyFactory;
-    private @Nullable OperatorTypingListener operatorTypingListener;
+    private List<OperatorTypingListener> operatorTypingListeners = new ArrayList<>();
     private String serverUrlString;
-    private @Nullable ChatStateListener stateListener;
+    private List<ChatStateListener> stateListeners = new ArrayList<>();
     private long unreadByOperatorTimestamp = -1;
-    private @Nullable UnreadByOperatorTimestampChangeListener
-            unreadByOperatorTimestampChangeListener;
+    private @Nullable UnreadByOperatorTimestampChangeListener unreadByOperatorTimestampChangeListener;
     private int unreadByVisitorMessageCount = -1;
-    private @Nullable UnreadByVisitorMessageCountChangeListener
-            unreadByVisitorMessageCountChangeListener;
+    private @Nullable UnreadByVisitorMessageCountChangeListener unreadByVisitorMessageCountChangeListener;
     private long unreadByVisitorTimestamp = -1;
-    private @Nullable UnreadByVisitorTimestampChangeListener
-            unreadByVisitorTimestampChangeListener;
-    private VisitSessionStateListener visitSessionStateListener;
+    private @Nullable UnreadByVisitorTimestampChangeListener unreadByVisitorTimestampChangeListener;
+    private List<VisitSessionStateListener> visitSessionStateListeners = new ArrayList<>();
     private GreetingMessageListener greetingMessageListener;
     private SurveyController surveyController;
     private String onlineStatus = "unknown";
@@ -90,7 +92,8 @@ public class MessageStreamImpl implements MessageStream {
             RoxActions actions,
             MessageHolder messageHolder,
             MessageComposingHandler messageComposingHandler,
-            LocationSettingsHolder locationSettingsHolder
+            LocationSettingsHolder locationSettingsHolder,
+            String location
     ) {
         this.serverUrlString = serverUrlString;
         this.currentChatMessageMapper = currentChatMessageMapper;
@@ -102,6 +105,7 @@ public class MessageStreamImpl implements MessageStream {
         this.messageHolder = messageHolder;
         this.messageComposingHandler = messageComposingHandler;
         this.locationSettingsHolder = locationSettingsHolder;
+        this.location = location;
     }
 
     @NonNull
@@ -818,7 +822,7 @@ public class MessageStreamImpl implements MessageStream {
     }
 
     private Boolean patternMatches(String fileName) {
-        return Pattern.compile("^[()_.a-zA-Z0-9\\+\\s\\-]+$").matcher(fileName).matches();
+        return Pattern.compile("^[()_.а-яА-ЯёЁa-zA-Z0-9\\+\\s\\-]+$").matcher(fileName).matches();
     }
 
     private SendFileCallback.SendFileError getFileError(String error) {
@@ -865,20 +869,27 @@ public class MessageStreamImpl implements MessageStream {
     }
 
     @Override
-    public void getRawLocationConfig(@NonNull String location, @NonNull RawLocationConfigCallback callback) {
+    public void getLocationConfig(@NonNull String location, @NonNull LocationConfigCallback callback) {
         accessChecker.checkAccess();
 
-        actions.getLocationConfig(location, response -> {
-            if (response == null) {
+        if (serverSettings != null) {
+            LocationSettingsItem locationSettings = serverSettings.getLocationSettings();
+            if (locationSettings == null) {
+                callback.onFailure();
+            } else {
+                callback.onSuccess(locationSettings);
+            }
+            return;
+        }
+
+        actions.getAccountConfig(location, response -> {
+            serverSettings = response;
+            LocationSettingsItem settings;
+            if (response == null || (settings = response.getLocationSettings()) == null) {
                 callback.onFailure();
                 return;
             }
-            String jsonResponse = InternalUtils.convertToString(response.getRawLocationSettings());
-            if (InternalUtils.isValidJson(jsonResponse)) {
-                callback.onSuccess(jsonResponse);
-            } else {
-                callback.onFailure();
-            }
+            callback.onSuccess(settings);
         });
     }
 
@@ -902,31 +913,81 @@ public class MessageStreamImpl implements MessageStream {
     @Override
     public void
     setVisitSessionStateListener(@NonNull VisitSessionStateListener visitSessionStateListener) {
-        this.visitSessionStateListener = visitSessionStateListener;
+        addVisitSessionStateListener(visitSessionStateListener);
+    }
+
+    @Override
+    public void addVisitSessionStateListener(@NonNull VisitSessionStateListener visitSessionStateListener) {
+        visitSessionStateListeners.add(visitSessionStateListener);
+    }
+
+    @Override
+    public void removeVisitSessionStateListener(@NonNull VisitSessionStateListener visitSessionStateListener) {
+        visitSessionStateListeners.remove(visitSessionStateListener);
     }
 
     @Override
     public void setCurrentOperatorChangeListener(@NonNull CurrentOperatorChangeListener listener) {
+        addCurrentOperatorChangeListener(listener);
+    }
+
+    @Override
+    public void addCurrentOperatorChangeListener(@NonNull CurrentOperatorChangeListener listener) {
         listener.getClass(); // NPE
-        this.currentOperatorListener = listener;
+        currentOperatorListeners.add(listener);
+    }
+
+    @Override
+    public void removeCurrentOperatorChangeListener(@NonNull CurrentOperatorChangeListener listener) {
+        listener.getClass(); // NPE
+        currentOperatorListeners.remove(listener);
     }
 
     @Override
     public void setChatStateListener(@NonNull ChatStateListener stateListener) {
+        addChatStateListener(stateListener);
+    }
+
+    @Override
+    public void addChatStateListener(@NonNull ChatStateListener stateListener) {
         stateListener.getClass(); // NPE
-        this.stateListener = stateListener;
+        stateListeners.add(stateListener);
+    }
+
+    @Override
+    public void removeChatStateListener(@NonNull ChatStateListener stateListener) {
+        stateListeners.remove(stateListener);
     }
 
     @Override
     public void setOperatorTypingListener(@NonNull OperatorTypingListener operatorTypingListener) {
-        operatorTypingListener.getClass(); // NPE
-        this.operatorTypingListener = operatorTypingListener;
+        addOperatorTypingListener(operatorTypingListener);
     }
 
     @Override
-    public void setDepartmentListChangeListener
-            (@NonNull DepartmentListChangeListener departmentListChangeListener) {
-        this.departmentListChangeListener = departmentListChangeListener;
+    public void addOperatorTypingListener(@NonNull OperatorTypingListener operatorTypingListener) {
+        operatorTypingListener.getClass(); // NPE
+        operatorTypingListeners.add(operatorTypingListener);
+    }
+
+    @Override
+    public void removeOperatorTypingListener(OperatorTypingListener operatorTypingListener) {
+        operatorTypingListeners.remove(operatorTypingListener);
+    }
+
+    @Override
+    public void setDepartmentListChangeListener(@NonNull DepartmentListChangeListener departmentListChangeListener) {
+        addDepartmentListChangeListener(departmentListChangeListener);
+    }
+
+    @Override
+    public void addDepartmentListChangeListener(@NonNull DepartmentListChangeListener departmentListChangeListener) {
+        departmentListChangeListeners.add(departmentListChangeListener);
+    }
+
+    @Override
+    public void removeDepartmentListChangeListener(@NonNull DepartmentListChangeListener departmentListChangeListener) {
+        departmentListChangeListeners.add(departmentListChangeListener);
     }
 
     @Override
@@ -960,18 +1021,40 @@ public class MessageStreamImpl implements MessageStream {
     }
 
     @Override
-    public void sendDialogToEmailAddress(@NonNull String email,
-                                         @NonNull final SendDialogToEmailAddressCallback sendDialogToEmailAddressCallback) {
-
+    public void autocomplete(String text, AutocompleteCallback callback) {
         accessChecker.checkAccess();
 
-        if (!lastChatState.isClosed()) {
-            actions.sendChatToEmailAddress(email, sendDialogToEmailAddressCallback);
-        } else {
-            sendDialogToEmailAddressCallback.onFailure(new RoxErrorImpl<>(
-                    SendDialogToEmailAddressCallback.SendDialogToEmailAddressError.NO_CHAT,
-                    null));
+        if (serverSettings != null) {
+            autocompleteInternal(text, callback);
+            return;
         }
+
+        actions.getAccountConfig(location, response -> {
+            serverSettings = response;
+            autocompleteInternal(text, callback);
+        });
+    }
+
+    private void autocompleteInternal(String text, AutocompleteCallback callback) {
+        AccountConfigItem settings;
+        if (serverSettings == null || (settings = serverSettings.getAccountConfig()) == null) {
+            callback.onFailure(new RoxErrorImpl<>(AutocompleteCallback.AutocompleteError.UNKNOWN, null));
+        } else {
+            String autocompleteUrl = settings.getHintsEndpoint();
+            if (autocompleteUrl == null) {
+                callback.onFailure(new RoxErrorImpl<>(AutocompleteCallback.AutocompleteError.HINTS_API_INVALID, null));
+                return;
+            }
+            actions.autocomplete(autocompleteUrl, new AutocompleteRequest(text), callback);
+        }
+    }
+
+    @Override
+    public void sendDialogToEmailAddress(@NonNull String email,
+                                         @NonNull final SendDialogToEmailAddressCallback sendDialogToEmailAddressCallback) {
+        accessChecker.checkAccess();
+
+        actions.sendChatToEmailAddress(email, sendDialogToEmailAddressCallback);
     }
 
     @Override
@@ -1184,7 +1267,7 @@ public class MessageStreamImpl implements MessageStream {
         if (!InternalUtils.equals(newOperator, currentOperator)) {
             Operator oldOperator = currentOperator;
             currentOperator = newOperator;
-            if (currentOperatorListener != null) {
+            for (CurrentOperatorChangeListener currentOperatorListener : currentOperatorListeners) {
                 currentOperatorListener.onOperatorChanged(oldOperator, newOperator);
             }
         }
@@ -1196,8 +1279,10 @@ public class MessageStreamImpl implements MessageStream {
         ChatItem.ItemChatState newState = (chat == null)
             ? ChatItem.ItemChatState.CLOSED
             : chat.getState();
-        if (stateListener != null && lastChatState != newState) {
-            stateListener.onStateChange(toPublicState(lastChatState), toPublicState(newState));
+        if (lastChatState != newState) {
+            for (ChatStateListener stateListener : stateListeners) {
+                stateListener.onStateChange(toPublicState(lastChatState), toPublicState(newState));
+            }
         }
         lastChatState = newState;
     }
@@ -1206,8 +1291,11 @@ public class MessageStreamImpl implements MessageStream {
         chat = currentChat;
 
         boolean operatorTypingStatus = currentChat != null && currentChat.isOperatorTyping();
-        if (operatorTypingListener != null && lastOperatorTypingStatus != operatorTypingStatus) {
-            operatorTypingListener.onOperatorTypingStateChanged(operatorTypingStatus);
+
+        if (lastOperatorTypingStatus != operatorTypingStatus) {
+            for (OperatorTypingListener operatorTypingListener : operatorTypingListeners) {
+                operatorTypingListener.onOperatorTypingStateChanged(operatorTypingStatus);
+            }
         }
         lastOperatorTypingStatus = operatorTypingStatus;
     }
@@ -1235,7 +1323,7 @@ public class MessageStreamImpl implements MessageStream {
         }
         this.departmentList = departmentList;
 
-        if (departmentListChangeListener != null) {
+        for (DepartmentListChangeListener departmentListChangeListener : departmentListChangeListeners) {
             departmentListChangeListener.receivedDepartmentList(departmentList);
         }
     }
@@ -1246,7 +1334,7 @@ public class MessageStreamImpl implements MessageStream {
 
         isProcessingChatOpen = false;
 
-        if (visitSessionStateListener != null) {
+        for (VisitSessionStateListener visitSessionStateListener : visitSessionStateListeners) {
             visitSessionStateListener.onStateChange(
                     toPublicVisitSessionState(previousVisitSessionState),
                     toPublicVisitSessionState(visitSessionState)
@@ -1514,8 +1602,8 @@ public class MessageStreamImpl implements MessageStream {
                 return SendKeyboardCallback.SendKeyboardError.BUTTON_ID_NO_SET;
             case RoxInternalError.REQUEST_MESSAGE_ID_NOT_SET:
                 return SendKeyboardCallback.SendKeyboardError.REQUEST_MESSAGE_ID_NOT_SET;
-            case RoxInternalError.CAN_NOT_CREATE_RESPONSE:
-                return SendKeyboardCallback.SendKeyboardError.CAN_NOT_CREATE_RESPONSE;
+            case RoxInternalError.CANNOT_CREATE_RESPONSE:
+                return SendKeyboardCallback.SendKeyboardError.CANNOT_CREATE_RESPONSE;
             default:
                 return SendKeyboardCallback.SendKeyboardError.UNKNOWN;
         }

@@ -1,9 +1,12 @@
 package chat.rox.android.sdk.impl.backend;
 
+import static chat.rox.android.sdk.impl.backend.RoxService.PARAMETER_FILE_UPLOAD;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import org.jetbrains.annotations.NotNull;
+import java.util.ArrayList;
+import java.util.List;
 
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -13,12 +16,19 @@ import chat.rox.android.sdk.MessageStream;
 import chat.rox.android.sdk.NotFatalErrorHandler.NotFatalErrorType;
 import chat.rox.android.sdk.RoxSession;
 import chat.rox.android.sdk.impl.RoxErrorImpl;
+import chat.rox.android.sdk.impl.backend.callbacks.DefaultCallback;
+import chat.rox.android.sdk.impl.backend.callbacks.SendOrDeleteMessageInternalCallback;
+import chat.rox.android.sdk.impl.backend.callbacks.SurveyFinishCallback;
+import chat.rox.android.sdk.impl.backend.callbacks.SurveyQuestionCallback;
+import chat.rox.android.sdk.impl.items.SuggestionItem;
+import chat.rox.android.sdk.impl.items.requests.AutocompleteRequest;
+import chat.rox.android.sdk.impl.items.responses.AutocompleteResponse;
 import chat.rox.android.sdk.impl.items.responses.DefaultResponse;
 import chat.rox.android.sdk.impl.items.responses.HistoryBeforeResponse;
 import chat.rox.android.sdk.impl.items.responses.HistorySinceResponse;
-import chat.rox.android.sdk.impl.items.responses.LocationSettingsResponse;
 import chat.rox.android.sdk.impl.items.responses.LocationStatusResponse;
 import chat.rox.android.sdk.impl.items.responses.SearchResponse;
+import chat.rox.android.sdk.impl.items.responses.ServerSettingsResponse;
 import chat.rox.android.sdk.impl.items.responses.UploadResponse;
 
 public class RoxActionsImpl implements RoxActions {
@@ -262,7 +272,7 @@ public class RoxActionsImpl implements RoxActions {
             public Call<UploadResponse> makeRequest(AuthData authData) {
                 return rox.uploadFile(
                         MultipartBody.Part.createFormData(
-                                "roxchat_upload_file",
+                                PARAMETER_FILE_UPLOAD,
                                 filename,
                                 body),
                         CHAT_MODE_ONLINE,
@@ -356,6 +366,52 @@ public class RoxActionsImpl implements RoxActions {
             @Override
             public void runCallback(DefaultResponse response) {
                 callback.onSuccess(response);
+            }
+        });
+    }
+
+    @Override
+    public void getAccountConfig(@NonNull String location, @NonNull DefaultCallback<ServerSettingsResponse> callback) {
+        enqueueRequestLoop(new ActionRequestLoop.RoxRequest<ServerSettingsResponse>(true) {
+            @Override
+            public Call<ServerSettingsResponse> makeRequest(AuthData authData) {
+                return rox.getAccountConfig(location);
+            }
+
+            @Override
+            public void runCallback(ServerSettingsResponse response) {
+                callback.onSuccess(response);
+            }
+        });
+    }
+
+    @Override
+    public void autocomplete(@NonNull String url, @NonNull AutocompleteRequest autocompleteRequest, @NonNull MessageStream.AutocompleteCallback callback) {
+        enqueueRequestLoop(new ActionRequestLoop.RoxRequest<AutocompleteResponse>(true) {
+            @Override
+            public Call<AutocompleteResponse> makeRequest(AuthData authData) {
+                return rox.autocomplete(url, autocompleteRequest);
+            }
+
+            @Override
+            public void runCallback(AutocompleteResponse response) {
+                List<SuggestionItem> suggestions = new ArrayList<>();
+                if (response != null && response.getSuggestions() != null) {
+                    suggestions = response.getSuggestions();
+                }
+                callback.onSuccess(suggestions);
+            }
+
+            @Override
+            public boolean isHandleError(@NonNull String error) {
+                return true;
+            }
+
+            @Override
+            public void handleError(@NonNull String error) {
+                callback.onFailure(
+                    new RoxErrorImpl<>(MessageStream.AutocompleteCallback.AutocompleteError.UNKNOWN, null)
+                );
             }
         });
     }
@@ -559,7 +615,8 @@ public class RoxActionsImpl implements RoxActions {
             public boolean isHandleError(@NonNull String error) {
                 return error.equals(RoxInternalError.OPERATOR_NOT_IN_CHAT)
                         || error.equals(RoxInternalError.NO_CHAT)
-                        || error.equals(RoxInternalError.NOTE_IS_TOO_LONG);
+                        || error.equals(RoxInternalError.NOTE_IS_TOO_LONG)
+                        || error.equals(RoxInternalError.OPERATOR_ALREADY_RATED);
             }
 
             @Override
@@ -572,6 +629,9 @@ public class RoxActionsImpl implements RoxActions {
                             break;
                         case RoxInternalError.NOTE_IS_TOO_LONG:
                             rateOperatorError = MessageStream.RateOperatorCallback.RateOperatorError.NOTE_IS_TOO_LONG;
+                            break;
+                        case RoxInternalError.OPERATOR_ALREADY_RATED:
+                            rateOperatorError = MessageStream.RateOperatorCallback.RateOperatorError.OPERATOR_ALREADY_RATED;
                             break;
                         default:
                             rateOperatorError = MessageStream.RateOperatorCallback.RateOperatorError.OPERATOR_NOT_IN_CHAT;
@@ -684,15 +744,23 @@ public class RoxActionsImpl implements RoxActions {
 
             @Override
             public boolean isHandleError(@NonNull String error) {
-                return error.equals(RoxInternalError.SENT_TOO_MANY_TIMES);
+                return error.equals(RoxInternalError.SENT_TOO_MANY_TIMES) ||
+                    error.equals(RoxInternalError.NO_CHAT);
             }
 
             @Override
             public void handleError(@NonNull String error) {
                 MessageStream.SendDialogToEmailAddressCallback.SendDialogToEmailAddressError sendDialogToEmailAddressError;
-                sendDialogToEmailAddressError = RoxInternalError.SENT_TOO_MANY_TIMES.equals(error)
-                        ? MessageStream.SendDialogToEmailAddressCallback.SendDialogToEmailAddressError.SENT_TOO_MANY_TIMES
-                        : MessageStream.SendDialogToEmailAddressCallback.SendDialogToEmailAddressError.UNKNOWN;
+                switch (error) {
+                    case RoxInternalError.SENT_TOO_MANY_TIMES:
+                        sendDialogToEmailAddressError = MessageStream.SendDialogToEmailAddressCallback.SendDialogToEmailAddressError.SENT_TOO_MANY_TIMES;
+                        break;
+                    case RoxInternalError.NO_CHAT:
+                        sendDialogToEmailAddressError = MessageStream.SendDialogToEmailAddressCallback.SendDialogToEmailAddressError.NO_CHAT;
+                        break;
+                    default:
+                        sendDialogToEmailAddressError = MessageStream.SendDialogToEmailAddressCallback.SendDialogToEmailAddressError.UNKNOWN;
+                }
                 sendChatToEmailCallback.onFailure(new RoxErrorImpl<>(sendDialogToEmailAddressError, error));
             }
         });
@@ -828,32 +896,6 @@ public class RoxActionsImpl implements RoxActions {
             @Override
             public void runCallback(LocationStatusResponse response) {
                 callback.onSuccess(response);
-            }
-        });
-    }
-
-    @Override
-    public void getLocationConfig(@NonNull String location, @NonNull DefaultCallback<LocationSettingsResponse> callback) {
-        enqueueRequestLoop(new ActionRequestLoop.RoxRequest<LocationSettingsResponse>(true) {
-
-            @Override
-            public Call<LocationSettingsResponse> makeRequest(AuthData authData) {
-                return rox.getAccountConfig(location);
-            }
-
-            @Override
-            public void runCallback(LocationSettingsResponse response) {
-                callback.onSuccess(response);
-            }
-
-            @Override
-            public boolean isHandleError(@NotNull String error) {
-                return true;
-            }
-
-            @Override
-            public void handleError(@NotNull String error) {
-                callback.onSuccess(null);
             }
         });
     }

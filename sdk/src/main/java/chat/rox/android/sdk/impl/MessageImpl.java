@@ -3,11 +3,11 @@ package chat.rox.android.sdk.impl;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import chat.rox.android.sdk.Message;
-import chat.rox.android.sdk.Operator;
-
 import java.util.List;
 import java.util.Objects;
+
+import chat.rox.android.sdk.Message;
+import chat.rox.android.sdk.Operator;
 
 public class MessageImpl implements Message, TimeMicrosHolder, Comparable<MessageImpl> {
 
@@ -235,6 +235,12 @@ public class MessageImpl implements Message, TimeMicrosHolder, Comparable<Messag
     @Override
     public boolean equals(Object o) {
         return o instanceof Message && this.getClientSideId().equals(((Message) o).getClientSideId());
+    }
+
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(avatarUrl, clientSideId, sessionId, keyboard, keyboardRequest, operatorId, senderName, serverUrl, timeMicros, type, text, sendStatus, attachment, rawText, serverSideId, savedInHistory, readByOperator, canBeEdited, canBeReplied, edited, canVisitorReact, canVisitorChangeReaction, reaction, quote, sticker);
     }
 
     @Override
@@ -665,12 +671,12 @@ public class MessageImpl implements Message, TimeMicrosHolder, Comparable<Messag
 
     public static class KeyboardImpl implements Keyboard {
         private final @NonNull Keyboard.State state;
-        private final @Nullable List<List<KeyboardButtons>> keyboardButton;
+        private final @Nullable List<List<KeyboardButton>> keyboardButton;
         private final @Nullable KeyboardResponse keyboardResponse;
 
         public KeyboardImpl(
                 @NonNull Keyboard.State state,
-                @Nullable List<List<KeyboardButtons>> keyboardButton,
+                @Nullable List<List<KeyboardButton>> keyboardButton,
                 @Nullable KeyboardResponse keyboardResponse) {
             this.state = state;
             this.keyboardButton = keyboardButton;
@@ -679,7 +685,7 @@ public class MessageImpl implements Message, TimeMicrosHolder, Comparable<Messag
 
         @Nullable
         @Override
-        public List<List<KeyboardButtons>> getButtons() {
+        public List<List<KeyboardButton>> getButtons() {
             return keyboardButton;
         }
 
@@ -707,17 +713,33 @@ public class MessageImpl implements Message, TimeMicrosHolder, Comparable<Messag
         public int hashCode() {
             return Objects.hash(state, keyboardButton, keyboardResponse);
         }
+
+        @Override
+        public String toString() {
+            return "KeyboardImpl{" +
+                    "state=" + state +
+                    ", keyboardButton=" + keyboardButton +
+                    ", keyboardResponse=" + keyboardResponse +
+                    '}';
+        }
     }
 
-    public static class KeyboardButtonsImpl implements KeyboardButtons {
+    public static class KeyboardButtonImpl implements KeyboardButton {
         private final @NonNull String id;
         private final @NonNull String text;
         private final @Nullable Configuration configuration;
+        private final @Nullable Params params;
 
-        public KeyboardButtonsImpl(@NonNull String id, @NonNull String text, @Nullable Configuration configuration) {
+        public KeyboardButtonImpl(
+            @NonNull String id,
+            @NonNull String text,
+            @Nullable Configuration configuration,
+            @Nullable Params params) {
+
             this.id = id;
             this.text = text;
             this.configuration = configuration;
+            this.params = params;
         }
 
         @NonNull
@@ -738,21 +760,37 @@ public class MessageImpl implements Message, TimeMicrosHolder, Comparable<Messag
             return configuration;
         }
 
+        @Nullable
+        @Override
+        public Params getParams() {
+            return params;
+        }
+
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            KeyboardButtonsImpl that = (KeyboardButtonsImpl) o;
-            return id.equals(that.id) && text.equals(that.text) && Objects.equals(configuration, that.configuration);
+            KeyboardButtonImpl that = (KeyboardButtonImpl) o;
+            return id.equals(that.id) && text.equals(that.text) && Objects.equals(configuration, that.configuration) && Objects.equals(params, that.params);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(id, text, configuration);
+            return Objects.hash(id, text, configuration, params);
+        }
+
+        @Override
+        public String toString() {
+            return "KeyboardButtonImpl{" +
+                    "id='" + id + '\'' +
+                    ", text='" + text + '\'' +
+                    ", configuration=" + configuration +
+                    ", params=" + params +
+                    '}';
         }
     }
 
-    public static class ConfigurationImpl implements KeyboardButtons.Configuration {
+    public static class ConfigurationImpl implements KeyboardButton.Configuration {
         private final @NonNull Type type;
         private final @NonNull State state;
         private final @NonNull String data;
@@ -779,6 +817,77 @@ public class MessageImpl implements Message, TimeMicrosHolder, Comparable<Messag
         @Override
         public State getState() {
             return state;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            ConfigurationImpl that = (ConfigurationImpl) o;
+            return type == that.type && state == that.state && data.equals(that.data);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(type, state, data);
+        }
+
+        @Override
+        public String toString() {
+            return "ConfigurationImpl{" +
+                    "type=" + type +
+                    ", state=" + state +
+                    ", data='" + data + '\'' +
+                    '}';
+        }
+    }
+
+    public static class ParamsImpl implements KeyboardButton.Params {
+        private final Type type;
+        private final String action;
+        private final String color;
+
+        public ParamsImpl(Type type, String action, String color) {
+            this.type = type;
+            this.action = action;
+            this.color = color;
+        }
+
+        @Override
+        public Type getType() {
+            return type;
+        }
+
+        @Override
+        public String getAction() {
+            return action;
+        }
+
+        @Override
+        public String getColor() {
+            return color;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            ParamsImpl params = (ParamsImpl) o;
+            return type == params.type && Objects.equals(action, params.action) && Objects.equals(color, params.color);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(type, action, color);
+        }
+
+        @Override
+        public String toString() {
+            return "ParamsImpl{" +
+                    "type=" + type +
+                    ", action='" + action + '\'' +
+                    ", color='" + color + '\'' +
+                    '}';
         }
     }
 
@@ -820,19 +929,21 @@ public class MessageImpl implements Message, TimeMicrosHolder, Comparable<Messag
     }
 
     public static class KeyboardRequestImpl implements Message.KeyboardRequest {
-        private final @NonNull KeyboardButtons button;
-        private final @NonNull String messageId;
+        @NonNull
+        private final KeyboardButton button;
+        @NonNull
+        private final String messageId;
 
         public KeyboardRequestImpl(
-                @NonNull KeyboardButtons button,
-                @NonNull String messageId) {
+            @NonNull KeyboardButton button,
+            @NonNull String messageId) {
             this.button = button;
             this.messageId = messageId;
         }
 
         @NonNull
         @Override
-        public KeyboardButtons getButtons() {
+        public KeyboardButton getButtons() {
             return button;
         }
 

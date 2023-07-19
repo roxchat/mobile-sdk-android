@@ -9,6 +9,7 @@ import chat.rox.android.sdk.Rox;
 import chat.rox.android.sdk.RoxSession;
 import chat.rox.android.sdk.impl.InternalUtils;
 import chat.rox.android.sdk.impl.RoxErrorImpl;
+import chat.rox.android.sdk.impl.backend.callbacks.DeltaCallback;
 import chat.rox.android.sdk.impl.items.delta.DeltaFullUpdate;
 import chat.rox.android.sdk.impl.items.delta.DeltaItem;
 import chat.rox.android.sdk.impl.items.responses.DeltaResponse;
@@ -24,7 +25,8 @@ public class DeltaRequestLoop extends AbstractRequestLoop {
     public static final String INCORRECT_SERVER_ANSWER = "Incorrect server answer";
     private static int providedAuthTokenErrorCount = 0;
     private final @Nullable String appVersion;
-    private final @NonNull DeltaCallback callback;
+    private final @NonNull
+    DeltaCallback callback;
     private final @NonNull String deviceId;
     private final @NonNull String platform;
     private final @Nullable String prechatFields;

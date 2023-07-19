@@ -4,8 +4,8 @@
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
         <!-- Customize your theme here. -->
         <item name="colorPrimary">@color/colorPrimary</item>
-        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
-        <item name="colorAccent">@color/colorAccent</item>
+        <item name="colorPrimaryDark">@color/rox_primary_dark</item>
+        <item name="colorAccent">@color/rox_color_accent</item>
     </style>
 
     <style name="AppTheme.NoActionBar">
@@ -32,12 +32,12 @@
     <style name="AppTheme.PopupOverlay" parent="ThemeOverlay.AppCompat.Light" />
 
     <style name="AppTheme.ButtonGreen" parent="Widget.AppCompat.Button.Colored">
-        <item name="colorButtonNormal">@color/colorAccent</item>
+        <item name="colorButtonNormal">@color/rox_color_accent</item>
         <item name="android:textColor">@color/white</item>
     </style>
 
     <style name="AppTheme.ButtonPurple" parent="Widget.AppCompat.Button.Colored">
-        <item name="colorButtonNormal">@color/colorPrimaryDark</item>
+        <item name="colorButtonNormal">@color/rox_primary_dark</item>
         <item name="android:textColor">@color/white</item>
     </style>
 
@@ -64,5 +64,4 @@
     <style name="RoxLoaderBar" parent="Widget.AppCompat.ProgressBar.Horizontal">
         <item name="android:progressDrawable">@drawable/rox_loader</item>
     </style>
-
 </resources>

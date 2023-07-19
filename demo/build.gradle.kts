@@ -16,11 +16,11 @@ android {
     compileSdk = 33
 
     defaultConfig {
-        applicationId = project.property("version_demo_rox").toString()
+        applicationId = "chat.rox.demo"
         minSdk = 21
         targetSdk = 33
         versionCode = project.property("versionCode").toString().toInt()
-        versionName = project.property("versionName").toString()
+        versionName = project.property("sdkVersionName").toString()
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -52,17 +52,19 @@ android {
 }
 
 dependencies {
-    implementation(project(":sdk"))
+    implementation(project(":chatview"))
+
     implementation("com.astuetz:pagerslidingtabstrip:1.0.1")
-    implementation("com.github.bumptech.glide:glide:3.7.0")
-    implementation("com.github.bumptech.glide:okhttp3-integration:1.4.0@aar")
+    implementation("com.github.bumptech.glide:glide:4.12.0")
+    implementation("com.github.bumptech.glide:okhttp3-integration:4.12.0@aar")
     implementation("de.hdodenhof:circleimageview:3.1.0")
     implementation("androidx.appcompat:appcompat:1.1.0")
     implementation("com.google.android.material:material:1.1.0")
     implementation("com.google.firebase:firebase-messaging:23.0.0")
-    implementation("com.google.firebase:firebase-crashlytics:18.2.4")
-    implementation("com.google.firebase:firebase-analytics:20.0.0")
+    implementation("com.google.firebase:firebase-crashlytics:18.3.7")
+    implementation("com.google.firebase:firebase-analytics:21.2.2")
     implementation("com.github.thijsk:TouchImageView:v1.3.1")
+
     implementation("androidx.recyclerview:recyclerview:1.1.0")
     implementation("androidx.constraintlayout:constraintlayout:1.1.3")
     implementation("androidx.cardview:cardview:1.0.0")

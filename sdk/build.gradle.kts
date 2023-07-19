@@ -2,10 +2,10 @@ plugins {
     id("com.android.library")
     id("maven-publish")
     id("signing")
-    id("org.jetbrains.kotlin.android") version "1.7.10"
+    id("org.jetbrains.kotlin.android")
 }
 
-val versionName = project.property("version_sdk_rox").toString()
+val versionName = project.property("sdkVersionName").toString()
 
 android {
     compileSdk = 33
@@ -21,6 +21,13 @@ android {
 
     lint {
         abortOnError = false
+    }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
     }
 
     compileOptions {

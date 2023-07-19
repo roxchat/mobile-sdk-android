@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -22,8 +23,9 @@ import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.request.animation.GlideAnimation;
+import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.target.SimpleTarget;
+import com.bumptech.glide.request.transition.Transition;
 import com.ortiz.touchview.TouchImageView;
 import chat.rox.android.demo.R;
 
@@ -50,19 +52,20 @@ public class ImageActivity extends AppCompatActivity {
             imageUri = callingActivityIntent.getData();
             if (imageUri != null) {
                 Glide.with(this)
-                    .load(imageUri)
                     .asBitmap()
-                    .into(new SimpleTarget<Bitmap>() {
+                    .load(imageUri)
+                    .into(new CustomTarget<Bitmap>() {
                         @Override
-                        public void onResourceReady(
-                            Bitmap resource,
-                            GlideAnimation<? super Bitmap> glideAnimation) {
-                                progressBar.setVisibility(View.GONE);
-                                imageView.setVisibility(View.VISIBLE);
-                                imageView.setImageBitmap(resource);
-                            }
+                        public void onResourceReady(@NonNull Bitmap resource, @Nullable Transition<? super Bitmap> transition) {
+                            progressBar.setVisibility(View.GONE);
+                            imageView.setVisibility(View.VISIBLE);
+                            imageView.setImageBitmap(resource);
                         }
-                    );
+
+                        @Override
+                        public void onLoadCleared(@Nullable Drawable placeholder) {
+                        }
+                    });
             }
         }
     }
@@ -108,7 +111,7 @@ public class ImageActivity extends AppCompatActivity {
                 DownloadManager.Request request = new DownloadManager.Request(imageUri);
                 request.setTitle(imgName);
                 request.allowScanningByMediaScanner();
-                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
                 request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, imgName);
 
                 manager.enqueue(request);

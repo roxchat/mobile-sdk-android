@@ -71,6 +71,7 @@ public class MessageHolderImpl implements MessageHolder {
 
                 @Override
                 public void onHistoryDeleted(String serverSideId) {
+                    onMessageDeleted(serverSideId);
                 }
 
                 @Override

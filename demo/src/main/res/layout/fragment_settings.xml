@@ -133,7 +133,6 @@
 
         <LinearLayout
             android:id="@+id/layoutFileLogger"
-            android:background="?android:attr/selectableItemBackground"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -157,15 +156,15 @@
 
             <CheckBox
                 android:id="@+id/fileLoggerCheck"
-                android:background="@android:color/transparent"
+                android:background="?android:attr/selectableItemBackground"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:button="@null"
-                android:clickable="false"
                 android:drawableEnd="?android:attr/listChoiceIndicatorMultiple"
                 android:drawableRight="?android:attr/listChoiceIndicatorMultiple"
                 android:text="@string/prefs_file_logger_summary"
                 android:textColor="?android:attr/textColorSecondary" />
+
         </LinearLayout>
 
         <View

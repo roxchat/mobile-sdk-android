@@ -15,7 +15,7 @@ import java.util.List;
 
 public class DepartmentDialog extends DialogFragment {
 
-    public static final String DEPARTMENT_DIALOG_TAG = "departmentDialog";
+    public static final String DIALOG_TAG = DepartmentDialog.class.getSimpleName();
     private List<String> departmentNames;
     private final DepartmentItemSelectedCallback callback;
 

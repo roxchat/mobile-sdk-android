@@ -1,9 +1,11 @@
 package chat.rox.android.demo;
 
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.preference.PreferenceManager;
 
 import android.view.MenuItem;
 import android.widget.Toast;
@@ -19,7 +21,7 @@ import chat.rox.android.sdk.RoxSession;
 public class RoxChatActivity extends AppCompatActivity implements FatalErrorHandler {
     public static final String EXTRA_SHOW_RATING_BAR_ON_STARTUP = "extra_show_rating_bar_on_startup";
     private static boolean active;
-    private RoxChatFragment fragment;
+    private WidgetChatFragment fragment;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,18 +45,20 @@ public class RoxChatActivity extends AppCompatActivity implements FatalErrorHand
     }
 
     private void initFragment(RoxSession roxSession) {
-        String fragmentByTag = RoxChatFragment.class.getSimpleName();
-        RoxChatFragment currentFragment = (RoxChatFragment) getSupportFragmentManager().findFragmentByTag(fragmentByTag);
+        String fragmentByTag = WidgetChatFragment.class.getSimpleName();
+        WidgetChatFragment currentFragment = (WidgetChatFragment) getSupportFragmentManager().findFragmentByTag(fragmentByTag);
 
         if (currentFragment == null) {
-            currentFragment = new RoxChatFragment();
+            SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+            currentFragment = new WidgetChatFragment();
+            currentFragment.setRoxSession(roxSession);
+
             getSupportFragmentManager()
                 .beginTransaction()
                 .replace(R.id.roxChatContainer, currentFragment, fragmentByTag)
                 .commit();
         }
         fragment = currentFragment;
-        fragment.setRoxSession(roxSession);
     }
 
     @Override
@@ -109,10 +113,8 @@ public class RoxChatActivity extends AppCompatActivity implements FatalErrorHand
 
     @Override
     public void onBackPressed() {
-        if (fragment.isDialogShown()) {
-            fragment.hideChatMenu();
-            return;
-        }
+        fragment.onBackPressed();
+
         super.onBackPressed();
         overridePendingTransition(R.anim.pull_in_left, R.anim.push_out_right);
     }

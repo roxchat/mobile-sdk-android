@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -94,8 +95,12 @@ public class SettingsFragment extends Fragment {
         notificationItem.setOnClickListener(v -> checkBoxNotification.performClick());
         checkBoxNotification.setChecked(sharedPreferences.getBoolean(KEY_NOTIFICATION, true));
         checkBoxNotification.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (ActivityCompat.checkSelfPermission(requireContext(), android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(requireActivity(), new String[] { android.Manifest.permission.WRITE_EXTERNAL_STORAGE }, PERMISSION_PUSH);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(requireActivity(), new String[] { Manifest.permission.POST_NOTIFICATIONS }, 0);
+                } else {
+                    sharedPreferences.edit().putBoolean(KEY_NOTIFICATION, isChecked).apply();
+                }
             } else {
                 sharedPreferences.edit().putBoolean(KEY_NOTIFICATION, isChecked).apply();
             }
@@ -120,10 +125,9 @@ public class SettingsFragment extends Fragment {
 
     private void initCheckBoxLogging(View rootView) {
         CheckBox checkBoxLogging = rootView.findViewById(R.id.fileLoggerCheck);
-        ViewGroup loggingItem = rootView.findViewById(R.id.layoutFileLogger);
-        loggingItem.setOnClickListener(v -> checkBoxLogging.performClick());
         checkBoxLogging.setChecked(sharedPreferences.getBoolean(KEY_FILE_LOGGER, false));
         checkBoxLogging.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            buttonView.jumpDrawablesToCurrentState();
             sharedPreferences.edit().putBoolean(KEY_FILE_LOGGER, isChecked).apply();
         });
     }

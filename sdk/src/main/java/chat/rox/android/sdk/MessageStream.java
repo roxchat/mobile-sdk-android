@@ -9,6 +9,8 @@ import java.util.Date;
 import java.util.List;
 
 import chat.rox.android.sdk.impl.MessageReaction;
+import chat.rox.android.sdk.impl.items.LocationSettingsItem;
+import chat.rox.android.sdk.impl.items.SuggestionItem;
 
 /**
  * @see RoxSession#getStream()
@@ -536,11 +538,11 @@ public interface MessageStream {
     void sendSticker(int stickerId, @Nullable SendStickerCallback sendStickerCallback);
 
     /**
-     * Receive raw location config from server.
+     * Receive location settings from server.
      * @param location location name
      * @param callback shows if the call to receive location config is completed or not
      * */
-    void getRawLocationConfig(@NonNull String location, @NonNull RawLocationConfigCallback callback);
+    void getLocationConfig(@NonNull String location, @NonNull LocationConfigCallback callback);
 
     /**
      * Sends geolocation to server
@@ -602,7 +604,21 @@ public interface MessageStream {
      * @see VisitSessionState
      * @param visitSessionStateListener {@link VisitSessionStateListener} object
      */
+    @Deprecated
     void setVisitSessionStateListener(@NonNull VisitSessionStateListener visitSessionStateListener);
+
+    /**
+     * Adds {@link VisitSessionStateListener} object.
+     * @see VisitSessionStateListener
+     * @see VisitSessionState
+     * @param visitSessionStateListener {@link VisitSessionStateListener} object
+     */
+    void addVisitSessionStateListener(@NonNull VisitSessionStateListener visitSessionStateListener);
+
+    /**
+     * Removes {@link VisitSessionStateListener} object.
+     */
+    void removeVisitSessionStateListener(@NonNull VisitSessionStateListener visitSessionStateListener);
 
     /**
      * Sets the {@link ChatState} change listener
@@ -610,7 +626,21 @@ public interface MessageStream {
      * @throws IllegalStateException if the RoxSession was destroyed
      * @throws RuntimeException if the method was called not from the thread the RoxSession was created in
      */
+    @Deprecated
     void setChatStateListener(@NonNull ChatStateListener listener);
+
+    /**
+     * Adds the {@link ChatState} change listener
+     * @param listener the {@link ChatState} change listener
+     * @throws IllegalStateException if the RoxSession was destroyed
+     * @throws RuntimeException if the method was called not from the thread the RoxSession was created in
+     */
+    void addChatStateListener(@NonNull ChatStateListener listener);
+
+    /**
+     * Removes the {@link ChatState} change listener
+     */
+    void removeChatStateListener(@NonNull ChatStateListener listener);
 
     /**
      * Sets the current {@link Operator} change listener
@@ -618,7 +648,21 @@ public interface MessageStream {
      * @throws IllegalStateException if the RoxSession was destroyed
      * @throws RuntimeException if the method was called not from the thread the RoxSession was created in
      */
+    @Deprecated
     void setCurrentOperatorChangeListener(@NonNull CurrentOperatorChangeListener listener);
+
+    /**
+     * Adds the current {@link Operator} change listener
+     * @param listener the current {@link Operator} change listener
+     * @throws IllegalStateException if the RoxSession was destroyed
+     * @throws RuntimeException if the method was called not from the thread the RoxSession was created in
+     */
+    void addCurrentOperatorChangeListener(@NonNull CurrentOperatorChangeListener listener);
+
+    /**
+     * Removes the current {@link Operator} change listener
+     */
+    void removeCurrentOperatorChangeListener(@NonNull CurrentOperatorChangeListener listener);
 
     /**
      * Sets the listener of the 'operator typing' status changes
@@ -626,7 +670,21 @@ public interface MessageStream {
      * @throws IllegalStateException if the RoxSession was destroyed
      * @throws RuntimeException if the method was called not from the thread the RoxSession was created in
      */
+    @Deprecated
     void setOperatorTypingListener(@NonNull OperatorTypingListener listener);
+
+    /**
+     * Adds the listener of the 'operator typing' status changes
+     * @param listener the listener of the 'operator typing' status changes
+     * @throws IllegalStateException if the RoxSession was destroyed
+     * @throws RuntimeException if the method was called not from the thread the RoxSession was created in
+     */
+    void addOperatorTypingListener(@NonNull OperatorTypingListener listener);
+
+    /**
+     * Removes the listener of the 'operator typing' status changes
+     */
+    void removeOperatorTypingListener(@NonNull OperatorTypingListener listener);
 
     /**
      * Sets {@link DepartmentListChangeListener} object.
@@ -634,8 +692,21 @@ public interface MessageStream {
      * @see Department
      * @param departmentListChangeListener {@link DepartmentListChangeListener} object
      */
-    void setDepartmentListChangeListener
-    (@NonNull DepartmentListChangeListener departmentListChangeListener);
+    @Deprecated
+    void setDepartmentListChangeListener(@NonNull DepartmentListChangeListener departmentListChangeListener);
+
+    /**
+     * Adds {@link DepartmentListChangeListener} object.
+     * @see DepartmentListChangeListener
+     * @see Department
+     * @param departmentListChangeListener {@link DepartmentListChangeListener} object
+     */
+    void addDepartmentListChangeListener(@NonNull DepartmentListChangeListener departmentListChangeListener);
+
+    /**
+     * Remove {@link DepartmentListChangeListener} object.
+     */
+    void removeDepartmentListChangeListener(@NonNull DepartmentListChangeListener departmentListChangeListener);
 
     /**
      * Sets the listener of the MessageStream LocationSettings changes.
@@ -683,6 +754,14 @@ public interface MessageStream {
      */
     @CustomMethod
     void clearChatHistory();
+
+    /**
+     * This method receiving hints
+     * @param text the string which hints are found for
+     * @param callback helps retrieving the suggests
+     */
+    @CustomMethod
+    void autocomplete(String text, AutocompleteCallback callback);
 
     /**
      * Sending chat history on email
@@ -805,6 +884,35 @@ public interface MessageStream {
     }
 
     /**
+     * @see MessageStream#autocomplete(String, AutocompleteCallback)
+     */
+    interface AutocompleteCallback {
+        /**
+         * Invoked when survey answer is sent successfully.
+         */
+        void onSuccess(List<SuggestionItem> suggestions);
+
+        /**
+         * Invoked when an error occurred while sending survey answer.
+         */
+        void onFailure(RoxError<AutocompleteError> roxError);
+
+        /**
+         * @see AutocompleteCallback#onFailure(RoxError)
+         */
+        enum AutocompleteError {
+            /**
+             * When visitor hints api endpoint is not set or invalid in the server account config.
+             */
+            HINTS_API_INVALID,
+            /**
+             * Received error is not supported by current RoxClientLibrary version.
+             */
+            UNKNOWN
+        }
+    }
+
+    /**
      * @see MessageStream#closeSurvey(SurveyCloseCallback)
      */
     interface SurveyCloseCallback {
@@ -869,13 +977,13 @@ public interface MessageStream {
     }
 
     /**
-     * @see MessageStream#getRawLocationConfig(String, RawLocationConfigCallback)
+     * @see MessageStream#getLocationConfig(String, LocationConfigCallback)(String, LocationConfigCallback)
      */
-    interface RawLocationConfigCallback {
+    interface LocationConfigCallback {
         /**
          * Invoked when location config received successfully.
          */
-        void onSuccess(String jsonLocationConfig);
+        void onSuccess(LocationSettingsItem locationConfig);
 
         /**
          * Invoked when an error occurred while receiving location config.
@@ -1054,7 +1162,7 @@ public interface MessageStream {
             /**
              * Cannot create response
              */
-            CAN_NOT_CREATE_RESPONSE,
+            CANNOT_CREATE_RESPONSE,
             /**
              * Received error is not supported by current RoxClientLibrary version.
              */
@@ -1318,7 +1426,10 @@ public interface MessageStream {
              * existing chat.
              */
             OPERATOR_NOT_IN_CHAT,
-
+            /**
+             * Arises when operator was already rated.
+             */
+            OPERATOR_ALREADY_RATED,
             /**
              * Note length is more than 2000 characters.
              */

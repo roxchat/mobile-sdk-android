@@ -12,15 +12,10 @@ import chat.rox.android.sdk.FAQItem;
 import chat.rox.android.sdk.FAQSearchItem;
 import chat.rox.android.sdk.FAQStructure;
 import chat.rox.android.sdk.NotFatalErrorHandler;
-import chat.rox.android.sdk.impl.backend.DefaultCallback;
 import chat.rox.android.sdk.impl.backend.FAQClient;
 import chat.rox.android.sdk.impl.backend.FAQClientBuilder;
 import chat.rox.android.sdk.impl.backend.InternalErrorListener;
-import chat.rox.android.sdk.impl.items.FAQCategoryItem;
 import chat.rox.android.sdk.impl.items.FAQItemItem;
-import chat.rox.android.sdk.impl.items.FAQSearchItemItem;
-import chat.rox.android.sdk.impl.items.FAQStructureItem;
-import chat.rox.android.sdk.impl.items.responses.DefaultResponse;
 
 import java.util.ArrayList;
 import java.util.List;

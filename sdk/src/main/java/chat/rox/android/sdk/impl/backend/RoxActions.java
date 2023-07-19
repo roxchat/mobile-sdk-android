@@ -5,10 +5,15 @@ import androidx.annotation.Nullable;
 
 import okhttp3.RequestBody;
 import chat.rox.android.sdk.MessageStream;
+import chat.rox.android.sdk.impl.backend.callbacks.DefaultCallback;
+import chat.rox.android.sdk.impl.backend.callbacks.SendOrDeleteMessageInternalCallback;
+import chat.rox.android.sdk.impl.backend.callbacks.SurveyFinishCallback;
+import chat.rox.android.sdk.impl.backend.callbacks.SurveyQuestionCallback;
+import chat.rox.android.sdk.impl.items.requests.AutocompleteRequest;
+import chat.rox.android.sdk.impl.items.responses.ServerSettingsResponse;
 import chat.rox.android.sdk.impl.items.responses.DefaultResponse;
 import chat.rox.android.sdk.impl.items.responses.HistoryBeforeResponse;
 import chat.rox.android.sdk.impl.items.responses.HistorySinceResponse;
-import chat.rox.android.sdk.impl.items.responses.LocationSettingsResponse;
 import chat.rox.android.sdk.impl.items.responses.LocationStatusResponse;
 import chat.rox.android.sdk.impl.items.responses.SearchResponse;
 
@@ -47,6 +52,14 @@ public interface RoxActions {
     void closeChat();
 
     void clearChatHistory(@NonNull DefaultCallback<DefaultResponse> callback);
+
+    void getAccountConfig(@NonNull String location, @NonNull DefaultCallback<ServerSettingsResponse> callback);
+
+    void autocomplete(
+        @NonNull String url,
+        @NonNull AutocompleteRequest autocompleteRequest,
+        @NonNull MessageStream.AutocompleteCallback callback
+    );
 
     void startChat(@NonNull String clientSideId,
                    @Nullable String departmentKey,
@@ -102,8 +115,6 @@ public interface RoxActions {
     void closeSurvey(@NonNull String surveyId, @NonNull SurveyFinishCallback callback);
 
     void getLocationStatus(@NonNull String location, @NonNull DefaultCallback<LocationStatusResponse> callback);
-
-    void getLocationConfig(@NonNull String location, @NonNull DefaultCallback<LocationSettingsResponse> callback);
 
     void sendGeolocation(float latitude, float longitude, @Nullable MessageStream.GeolocationCallback callback);
 }

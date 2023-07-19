@@ -11,6 +11,7 @@ import chat.rox.android.sdk.BuildConfig;
 import chat.rox.android.sdk.ProvidedAuthorizationTokenStateListener;
 import chat.rox.android.sdk.Rox;
 import chat.rox.android.sdk.RoxSession;
+import chat.rox.android.sdk.impl.backend.callbacks.DeltaCallback;
 import chat.rox.android.sdk.impl.items.delta.DeltaFullUpdate;
 import chat.rox.android.sdk.impl.items.delta.DeltaItem;
 

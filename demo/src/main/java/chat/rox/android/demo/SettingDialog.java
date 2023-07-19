@@ -97,7 +97,7 @@ public class SettingDialog extends DialogFragment {
 
                     errorMessage.setVisibility(View.INVISIBLE);
                     positiveButton.setEnabled(true);
-                    int colorEditTint = ContextCompat.getColor(requireContext(), R.color.colorAccent);
+                    int colorEditTint = ContextCompat.getColor(requireContext(), R.color.rox_color_accent);
 
                     if (!isUrlValid(text)) {
                         if (text.length() > 0) {

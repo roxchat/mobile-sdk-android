@@ -27,7 +27,7 @@ public class RoxSessionDirector {
     public static void createSessionBuilderWithAuth1Visitor(Context context, OnSessionBuilderCreatedListener listener) {
         String visitorFieldAuthVersion1 =
             "{\"id\":\"1234567890987654321\"," +
-                    "\"display_name\":\"John\"," +
+                    "\"display_name\":\"Никита\"," +
                     "\"crc\":\"ffadeb6aa3c788200824e311b9aa44cb\"}";
 
         Rox.SessionBuilder sessionBuilder = newSessionBuilder(context).setVisitorFieldsJson(visitorFieldAuthVersion1);

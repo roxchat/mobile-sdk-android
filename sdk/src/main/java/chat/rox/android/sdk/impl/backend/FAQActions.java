@@ -3,6 +3,7 @@ package chat.rox.android.sdk.impl.backend;
 import androidx.annotation.NonNull;
 
 import chat.rox.android.sdk.FAQ;
+import chat.rox.android.sdk.impl.backend.callbacks.DefaultCallback;
 import chat.rox.android.sdk.impl.items.FAQCategoryItem;
 import chat.rox.android.sdk.impl.items.FAQItemItem;
 import chat.rox.android.sdk.impl.items.FAQSearchItemItem;

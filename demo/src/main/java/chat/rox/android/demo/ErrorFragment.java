@@ -10,8 +10,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
-import chat.rox.android.demo.R;
-
 public class ErrorFragment extends Fragment {
     private static final String EXTRA_HEADER = "extra_header";
     private static final String EXTRA_DESC = "extra_desc";

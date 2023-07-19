@@ -3,6 +3,7 @@ package chat.rox.android.sdk.impl.backend;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
 import retrofit2.Call;
+import retrofit2.http.Body;
 import retrofit2.http.Field;
 import retrofit2.http.FormUrlEncoded;
 import retrofit2.http.GET;
@@ -12,11 +13,14 @@ import retrofit2.http.POST;
 import retrofit2.http.Part;
 import retrofit2.http.Path;
 import retrofit2.http.Query;
+import retrofit2.http.Url;
+import chat.rox.android.sdk.impl.items.requests.AutocompleteRequest;
+import chat.rox.android.sdk.impl.items.responses.AutocompleteResponse;
+import chat.rox.android.sdk.impl.items.responses.ServerSettingsResponse;
 import chat.rox.android.sdk.impl.items.responses.DefaultResponse;
 import chat.rox.android.sdk.impl.items.responses.DeltaResponse;
 import chat.rox.android.sdk.impl.items.responses.HistoryBeforeResponse;
 import chat.rox.android.sdk.impl.items.responses.HistorySinceResponse;
-import chat.rox.android.sdk.impl.items.responses.LocationSettingsResponse;
 import chat.rox.android.sdk.impl.items.responses.LocationStatusResponse;
 import chat.rox.android.sdk.impl.items.responses.SearchResponse;
 import chat.rox.android.sdk.impl.items.responses.UploadResponse;
@@ -37,7 +41,7 @@ public interface RoxService {
     String PARAMETER_DEVICE_ID = "device-id";
     String PARAMETER_EMAIL = "email";
     String PARAMETER_EVENT = "event";
-    String PARAMETER_FILE_UPLOAD = "roxchat_upload_file";
+    String PARAMETER_FILE_UPLOAD = "rox_upload_file";
     String PARAMETER_GUID = "guid";
     String PARAMETER_LOCATION = "location";
     String PARAMETER_KIND = "kind";
@@ -58,7 +62,7 @@ public interface RoxService {
     String PARAMETER_RESPOND_IMMEDIATELY = "respond-immediately";
     String PARAMETER_REQUEST_MESSAGE_ID = "request-message-id";
     String PARAMETER_REACTION = "reaction";
-    String PARAMETER_SDK_VERSION = "x-roxchat-sdk-version";
+    String PARAMETER_SDK_VERSION = "x-rox-sdk-version";
     String PARAMETER_SINCE = "since";
     String PARAMETER_STICKER = "sticker-id";
     String PARAMETER_SURVEY_ANSWER = "answer";
@@ -77,6 +81,7 @@ public interface RoxService {
     String PARAMETER_GEO_LONGITUDE = "longitude";
     String URL_SUFFIX_ACTION = "l/v/m/action";
     String URL_SUFFIX_DELTA = "l/v/m/delta";
+    String URL_SUFFIX_INIT = "l/v/m/init";
     String URL_SUFFIX_FILE_DELETE = "l/v/file-delete";
     String URL_SUFFIX_FILE_UPLOAD = "l/v/m/upload";
     String URL_SUFFIX_HISTORY = "l/v/m/history";
@@ -109,7 +114,7 @@ public interface RoxService {
             @Query(PARAMETER_TIMESTAMP) long timestamp
     );
 
-    @GET(URL_SUFFIX_DELTA)
+    @GET(URL_SUFFIX_INIT)
     Call<DeltaResponse> getLogin(
             @Header(PARAMETER_SDK_VERSION) String sdkVersion,
             @Query(PARAMETER_EVENT) String event,
@@ -336,7 +341,7 @@ public interface RoxService {
     );
 
     @GET(URL_SUFFIX_GET_CONFIG + "{locationName}")
-    Call<LocationSettingsResponse> getAccountConfig(
+    Call<ServerSettingsResponse> getAccountConfig(
         @Path("locationName") String location
     );
 
@@ -346,6 +351,12 @@ public interface RoxService {
         @Field(PARAMETER_ACTION) String action,
         @Field(PARAMETER_PAGE_ID) String pageId,
         @Field(PARAMETER_AUTHORIZATION_TOKEN) String authToken
+    );
+
+    @POST
+    Call<AutocompleteResponse> autocomplete(
+        @Url String autocompleteUrl,
+        @Body AutocompleteRequest body
     );
 
     @FormUrlEncoded

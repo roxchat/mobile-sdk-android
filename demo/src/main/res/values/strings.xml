@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Rox demo chat</string>
+    <string name="reply_thumbnail" translatable="false">reply thumbnail</string>
     <string name="first_screen_text1">Welcome to the Demo App for\nRox Mobile SDK!</string>
     <string name="first_screen_text2">Tap the button below to start chatting.</string>
     <string name="first_screen_text3">Sign in as an agent to answer this chat at:</string>
@@ -53,10 +54,10 @@
     <string name="push_rate_operator">Rate operator</string>
     <string name="prefs_notifications_summary">Enable FCM push notifications for new messages from the agent</string>
     <string name="prefs_notifications_title">Notifications</string>
-    <string name="prefs_file_logger_title">Logging</string>
+    <string name="prefs_file_logger_title">For testers</string>
     <string name="prefs_file_logger_summary">Write logs in file</string>
     <string name="prefs_account_title">Account name</string>
-    <string name="prefs_account_summary">Rox account name or full server address (for example, \"demo\" or \"https://demo.rox.chat\")</string>
+    <string name="prefs_account_summary">Rox account name or full server address (for example, \"demo\" или \"https://demo.rox.chat\")</string>
     <string name="prefs_location_summary">The location that will receive the appeal (for example, \"mobile\")</string>
     <string name="prefs_location_title">Location</string>
     <string name="prefs_privacy">Privacy</string>
@@ -66,7 +67,6 @@
 
     <string name="options">Options</string>
     <string name="save_image">Save image?</string>
-    <string name="saving_file">Save file %1$s</string>
     <string name="sending_file">"Sending file: "</string>
     <string name="def_image_name">image_%1$d.jpg</string>
     <string name="saved_file">File %1$s saved</string>
@@ -112,7 +112,6 @@
     <string name="survey_rate_title">Rate operator</string>
     <string name="survey_send_answer">Send</string>
     <string name="survey_edit_text_hint">Type comment text</string>
-    <string name="reply_thumbnail" translatable="false">Reply Thumbnail</string>
     <string name="dialog_ok">ok</string>
     <string name="dialog_cancel">cancel</string>
 
@@ -122,4 +121,6 @@
     <string name="file_upload_connection_timeout">File upload timeout exceeded</string>
 
     <string name="cannot_open_file">Cannot find an app for opening the file</string>
+    <string name="prefs_testers_title">For testers</string>
+    <string name="prefs_use_chat_view">Использовать ChatView</string>
 </resources>

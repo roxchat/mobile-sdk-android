@@ -40,8 +40,8 @@ import chat.rox.android.sdk.Rox;
 import chat.rox.android.sdk.RoxError;
 import chat.rox.android.sdk.RoxSession;
 import chat.rox.android.sdk.impl.backend.AuthData;
-import chat.rox.android.sdk.impl.backend.DefaultCallback;
-import chat.rox.android.sdk.impl.backend.DeltaCallback;
+import chat.rox.android.sdk.impl.backend.callbacks.DefaultCallback;
+import chat.rox.android.sdk.impl.backend.callbacks.DeltaCallback;
 import chat.rox.android.sdk.impl.backend.DeltaRequestLoop;
 import chat.rox.android.sdk.impl.backend.InternalErrorListener;
 import chat.rox.android.sdk.impl.backend.SessionParamsListener;
@@ -350,7 +350,8 @@ public class RoxSessionImpl implements RoxSession {
                 actions,
                 messageHolder,
                 new MessageComposingHandlerImpl(handler, actions),
-                new LocationSettingsHolder(preferences)
+                new LocationSettingsHolder(preferences),
+                location
         );
 
         final HistoryPoller hPoller = new HistoryPoller(sessionDestroyer,
@@ -701,6 +702,9 @@ public class RoxSessionImpl implements RoxSession {
             messageHolder.receiveHistoryUpdate(messages, Collections.<String>emptySet(), new Runnable() {
                 @Override
                 public void run() {
+                    // Ревизия сохраняется только по окончанию записи истории.
+                    // Так, если история не сможет сохраниться,
+                    // ревизия не будет перезаписана и история будет перезапрошена.
                     historyMeta.setRevision(lastRevision);
                 }
             });
@@ -721,6 +725,9 @@ public class RoxSessionImpl implements RoxSession {
                     new Runnable() {
                 @Override
                 public void run() {
+                    // Ревизия сохраняется только по окончанию записи истории.
+                    // Так, если история не сможет сохраниться,
+                    // ревизия не будет перезаписана и история будет перезапрошена.
                     historyMeta.setRevision(lastRevision);
                 }
             });
@@ -744,6 +751,9 @@ public class RoxSessionImpl implements RoxSession {
                     messageHolder.receiveHistoryUpdate(messages, deleted, new Runnable() {
                         @Override
                         public void run() {
+                            // Ревизия сохраняется только по окончанию записи истории.
+                            // Так, если история не сможет сохраниться,
+                            // ревизия не будет перезаписана и история будет перезапрошена.
                             historyMeta.setRevision(revision);
                             if (isInitial && !hasMore) {
                                 messageHolder.setReachedEndOfRemoteHistory(true);

@@ -289,7 +289,7 @@ public final class Rox {
          *
          * @param preferences Android {@link SharedPreferences} object to store visitor data
          * @return this builder object
-         * @see #setVisitorFieldsJson
+         * @see #setVisitorFieldsJson подробнее об авторизации
          */
         public SessionBuilder setVisitorDataPreferences(@NonNull SharedPreferences preferences) {
             preferences.getClass(); // NPE
