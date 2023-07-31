@@ -41,7 +41,7 @@ public interface RoxService {
     String PARAMETER_DEVICE_ID = "device-id";
     String PARAMETER_EMAIL = "email";
     String PARAMETER_EVENT = "event";
-    String PARAMETER_FILE_UPLOAD = "rox_upload_file";
+    String PARAMETER_FILE_UPLOAD = "roxchat_upload_file";
     String PARAMETER_GUID = "guid";
     String PARAMETER_LOCATION = "location";
     String PARAMETER_KIND = "kind";
@@ -62,7 +62,7 @@ public interface RoxService {
     String PARAMETER_RESPOND_IMMEDIATELY = "respond-immediately";
     String PARAMETER_REQUEST_MESSAGE_ID = "request-message-id";
     String PARAMETER_REACTION = "reaction";
-    String PARAMETER_SDK_VERSION = "x-rox-sdk-version";
+    String PARAMETER_SDK_VERSION = "x-roxchat-sdk-version";
     String PARAMETER_SINCE = "since";
     String PARAMETER_STICKER = "sticker-id";
     String PARAMETER_SURVEY_ANSWER = "answer";
