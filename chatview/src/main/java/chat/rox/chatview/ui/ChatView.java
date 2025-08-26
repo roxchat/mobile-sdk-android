@@ -8,19 +8,27 @@ import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.LinearLayout;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import chat.rox.android.sdk.Department;
+import chat.rox.android.sdk.FatalErrorHandler;
+import chat.rox.android.sdk.MessageStream;
 import chat.rox.android.sdk.MessageTracker;
+import chat.rox.android.sdk.Survey;
 import chat.rox.android.sdk.Rox;
+import chat.rox.android.sdk.RoxError;
 import chat.rox.android.sdk.RoxSession;
 import chat.rox.chatview.ChatAdapter;
 import chat.rox.chatview.ChatAdapterImpl;
@@ -28,16 +36,23 @@ import chat.rox.chatview.ChatHolderActionsImpl;
 import chat.rox.chatview.R;
 import chat.rox.chatview.utils.DepartmentsDialog;
 import chat.rox.chatview.utils.FileHelper;
+import chat.rox.chatview.utils.SurveyDialog;
 import chat.rox.chatview.utils.ViewUtils;
 
-public class ChatView extends LinearLayout {
+public class ChatView extends FrameLayout implements FatalErrorHandler {
     private ChatList chatList;
     private ChatEditBar editBar;
+    private ViewGroup chatLayout;
+    private ViewGroup errorLayout;
+    private TextView errorHeader;
+    private TextView errorDescription;
     private RoxSession session;
     private DepartmentsDialog departmentsDialog;
     private String accountName;
     private String locationName;
     private FileHelper fileHelper;
+    private SurveyDialog surveyDialog;
+    private int styleRes;
 
     public ChatView(Context context) {
         this(context, null);
@@ -50,11 +65,10 @@ public class ChatView extends LinearLayout {
     public ChatView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
 
-        setOrientation(LinearLayout.VERTICAL);
         TypedArray typedArray = context.obtainStyledAttributes(attrs, R.styleable.ChatView, defStyleAttr, R.style.ChatViewBase);
         accountName = typedArray.getString(R.styleable.ChatView_chv_account_name);
         locationName = typedArray.getString(R.styleable.ChatView_chv_location_name);
-        int styleRes = typedArray.getResourceId(R.styleable.ChatView_chv_chat_style, R.style.ChatViewDefaultStyle);
+        styleRes = typedArray.getResourceId(R.styleable.ChatView_chv_chat_style, R.style.ChatViewDefaultStyle);
         typedArray.recycle();
 
         Context themedContext = new ContextThemeWrapper(context, styleRes);
@@ -63,6 +77,12 @@ public class ChatView extends LinearLayout {
         chatList = rootView.findViewById(R.id.chat_list);
         editBar = rootView.findViewById(R.id.chat_edit_bar);
 
+        chatLayout = rootView.findViewById(R.id.chatLayout);
+        errorLayout = rootView.findViewById(R.id.errorLayout);
+        errorHeader = rootView.findViewById(R.id.errorHeader);
+        errorDescription = rootView.findViewById(R.id.errorDesc);
+
+        initSurveyDialog();
         fileHelper = new FileHelper();
         chatList.setListControllerReady(listController -> editBar.setListController(listController));
     }
@@ -95,6 +115,10 @@ public class ChatView extends LinearLayout {
         return fileHelper;
     }
 
+    public void setAutoScrollToLastMsgEnabled(boolean isEnabled) {
+        chatList.setAutoScrollToLastMsgEnabled(isEnabled);
+    }
+
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
@@ -109,6 +133,7 @@ public class ChatView extends LinearLayout {
             chatList.setAdapter(chatAdapter);
         }
         editBar.setStream(session.getStream());
+        setSurveyHandler();
         setDepartmentsHandler();
 
         session.resume();
@@ -125,6 +150,71 @@ public class ChatView extends LinearLayout {
         fileHelper.stopWork();
         session.pause();
         session.getStream().closeChat();
+    }
+
+    @Override
+    public void onError(@NonNull RoxError<FatalErrorType> error) {
+        chatLayout.setVisibility(View.GONE);
+        errorLayout.setVisibility(View.VISIBLE);
+
+        switch (error.getErrorType()) {
+            case ACCOUNT_BLOCKED:
+                showError(R.string.error_account_blocked_header, R.string.error_account_blocked_desc);
+                break;
+            case VISITOR_BANNED:
+                showError(R.string.error_user_banned_header, R.string.error_user_banned_desc);
+                break;
+            case WRONG_PROVIDED_VISITOR_HASH:
+                showError(R.string.error_user_hash_invalid_header, R.string.error_user_hash_invalid_desc);
+                break;
+            default:
+                showError(
+                    R.string.error_unknown_header,
+                    R.string.error_unknown_desc,
+                    error.getErrorString()
+                );
+                break;
+        }
+    }
+
+    private void showError(int errorHeaderId, int errorDescId, String... args) {
+        errorHeader.setText(errorHeaderId);
+        errorDescription.setText(getResources().getString(errorDescId, (Object[]) args));
+    }
+
+    private void setSurveyHandler() {
+        session.getStream().setSurveyListener(new MessageStream.SurveyListener() {
+            @Override
+            public void onSurvey(Survey survey) {
+                if (!surveyDialog.isVisible()) {
+                    try {
+                        FragmentManager fragmentManager = ((FragmentActivity) getContext()).getSupportFragmentManager();
+                        surveyDialog.show(fragmentManager, "surveyDialog");
+                    } catch (ClassCastException e) {
+                        Log.e("RoxLog", "Can't get fragment manager");
+                    }
+                }
+            }
+
+            @Override
+            public void onNextQuestion(Survey.Question question) {
+                surveyDialog.setCurrentQuestion(question);
+            }
+
+            @Override
+            public void onSurveyCancelled() {
+                if (surveyDialog.isVisible()) {
+                    surveyDialog.dismiss();
+                }
+                showToast(getContext().getString(R.string.survey_finish_message), Toast.LENGTH_SHORT);
+            }
+        });
+    }
+
+    private void initSurveyDialog() {
+        surveyDialog = new SurveyDialog(styleRes);
+        surveyDialog.setAnswerListener(answer -> session.getStream().sendSurveyAnswer(answer, null));
+        surveyDialog.setCancelListener(() -> session.getStream().closeSurvey(null));
     }
 
     private void setDepartmentsHandler() {
@@ -212,12 +302,23 @@ public class ChatView extends LinearLayout {
 
     private RoxSession createDefaultSession(Rox.SessionBuilder builder) {
         builder.setContext(getContext())
+            .setErrorHandler(this)
             .setAccountName(accountName)
             .setLocation(locationName);
         return builder.build();
     }
 
-    public static ChatList createWithStyle(Context context, int styleRes) {
-        return new ChatList(new ContextThemeWrapper(context, styleRes));
+    private void showToast(String messageToast, int lengthToast) {
+        Toast.makeText(getContext(), messageToast, lengthToast).show();
+    }
+
+    /**
+     * Create ChatView with custom theme
+     * @param context activity or context
+     * @param styleRes your custom style resource
+     * @return instance of ChatView
+     */
+    public static ChatView createWithStyle(Context context, int styleRes) {
+        return new ChatView(new ContextThemeWrapper(context, styleRes));
     }
 }

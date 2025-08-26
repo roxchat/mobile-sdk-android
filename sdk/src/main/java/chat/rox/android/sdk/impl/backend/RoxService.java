@@ -16,7 +16,8 @@ import retrofit2.http.Query;
 import retrofit2.http.Url;
 import chat.rox.android.sdk.impl.items.requests.AutocompleteRequest;
 import chat.rox.android.sdk.impl.items.responses.AutocompleteResponse;
-import chat.rox.android.sdk.impl.items.responses.ServerSettingsResponse;
+import chat.rox.android.sdk.impl.items.responses.ErrorResponse;
+import chat.rox.android.sdk.impl.items.responses.ServerConfigsResponse;
 import chat.rox.android.sdk.impl.items.responses.DefaultResponse;
 import chat.rox.android.sdk.impl.items.responses.DeltaResponse;
 import chat.rox.android.sdk.impl.items.responses.HistoryBeforeResponse;
@@ -34,6 +35,7 @@ public interface RoxService {
     String PARAMETER_CHAT_DEPARTMENT_KEY = "department-key";
     String PARAMETER_CHAT_FIRST_QUESTION = "first-question";
     String PARAMETER_CHAT_FORCE_ONLINE = "force-online";
+    String PARAMETER_CHAT_FORCE_START = "force-start";
     String PARAMETER_CHAT_MODE = "chat-mode";
     String PARAMETER_CLIENT_SIDE_ID = "client-side-id";
     String PARAMETER_CUSTOM_FIELDS = "custom_fields";
@@ -79,6 +81,7 @@ public interface RoxService {
     String PARAMETER_VISITOR_TYPING = "typing";
     String PARAMETER_GEO_LATITUDE = "latitude";
     String PARAMETER_GEO_LONGITUDE = "longitude";
+    String PARAMETER_THREAD_ID = "thread_id";
     String URL_SUFFIX_ACTION = "l/v/m/action";
     String URL_SUFFIX_DELTA = "l/v/m/delta";
     String URL_SUFFIX_INIT = "l/v/m/init";
@@ -108,7 +111,7 @@ public interface RoxService {
 
     @GET(URL_SUFFIX_DELTA)
     Call<DeltaResponse> getDelta(
-            @Query(PARAMETER_SINCE) long since,
+            @Query(PARAMETER_SINCE) String since,
             @Query(PARAMETER_PAGE_ID) String pageId,
             @Query(PARAMETER_AUTHORIZATION_TOKEN) String authorizationToken,
             @Query(PARAMETER_TIMESTAMP) long timestamp
@@ -211,6 +214,7 @@ public interface RoxService {
     Call<DefaultResponse> startChat(
             @Field(PARAMETER_ACTION) String action,
             @Field(PARAMETER_CHAT_FORCE_ONLINE) Boolean isForceOnline,
+            @Field(PARAMETER_CHAT_FORCE_START) Boolean forceStart,
             @Field(PARAMETER_CLIENT_SIDE_ID) String clientSideId,
             @Field(PARAMETER_PAGE_ID) String pageId,
             @Field(PARAMETER_AUTHORIZATION_TOKEN) String authorizationToken,
@@ -233,6 +237,7 @@ public interface RoxService {
             @Field(PARAMETER_ACTION) String action,
             @Field(PARAMETER_OPERATOR_ID) String operatorId,
             @Field(PARAMETER_VISITOR_NOTE) String note,
+            @Field(PARAMETER_THREAD_ID) String threadId,
             @Field(PARAMETER_OPERATOR_RATING) int rating,
             @Field(PARAMETER_PAGE_ID) String pageId,
             @Field(PARAMETER_AUTHORIZATION_TOKEN) String authorizationToken
@@ -341,7 +346,7 @@ public interface RoxService {
     );
 
     @GET(URL_SUFFIX_GET_CONFIG + "{locationName}")
-    Call<ServerSettingsResponse> getAccountConfig(
+    Call<ServerConfigsResponse> getAccountConfig(
         @Path("locationName") String location
     );
 
@@ -357,6 +362,17 @@ public interface RoxService {
     Call<AutocompleteResponse> autocomplete(
         @Url String autocompleteUrl,
         @Body AutocompleteRequest body
+    );
+
+    @FormUrlEncoded
+    @POST(URL_SUFFIX_ACTION)
+    Call<ErrorResponse> sendResolutionSurvey(
+        @Field(PARAMETER_ACTION) String action,
+        @Field(PARAMETER_PAGE_ID) String pageId,
+        @Field(PARAMETER_AUTHORIZATION_TOKEN) String authToken,
+        @Field(PARAMETER_OPERATOR_ID) String id,
+        @Field(PARAMETER_SURVEY_ANSWER) int answer,
+        @Field(PARAMETER_THREAD_ID) String threadId
     );
 
     @FormUrlEncoded

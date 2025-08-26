@@ -10,7 +10,7 @@ import chat.rox.android.sdk.impl.backend.callbacks.SendOrDeleteMessageInternalCa
 import chat.rox.android.sdk.impl.backend.callbacks.SurveyFinishCallback;
 import chat.rox.android.sdk.impl.backend.callbacks.SurveyQuestionCallback;
 import chat.rox.android.sdk.impl.items.requests.AutocompleteRequest;
-import chat.rox.android.sdk.impl.items.responses.ServerSettingsResponse;
+import chat.rox.android.sdk.impl.items.responses.ServerConfigsResponse;
 import chat.rox.android.sdk.impl.items.responses.DefaultResponse;
 import chat.rox.android.sdk.impl.items.responses.HistoryBeforeResponse;
 import chat.rox.android.sdk.impl.items.responses.HistorySinceResponse;
@@ -53,7 +53,7 @@ public interface RoxActions {
 
     void clearChatHistory(@NonNull DefaultCallback<DefaultResponse> callback);
 
-    void getAccountConfig(@NonNull String location, @NonNull DefaultCallback<ServerSettingsResponse> callback);
+    void getAccountConfig(@NonNull String location, @NonNull DefaultCallback<ServerConfigsResponse> callback);
 
     void autocomplete(
         @NonNull String url,
@@ -61,11 +61,14 @@ public interface RoxActions {
         @NonNull MessageStream.AutocompleteCallback callback
     );
 
-    void startChat(@NonNull String clientSideId,
-                   @Nullable String departmentKey,
-                   @Nullable String firstQuestion,
-                   @Nullable String customFields,
-                   @NonNull DefaultCallback<DefaultResponse> callback);
+    void startChat(
+        @NonNull String clientSideId,
+        @Nullable String departmentKey,
+        @Nullable String firstQuestion,
+        @Nullable String customFields,
+        boolean forceStartChat,
+        @NonNull DefaultCallback<DefaultResponse> callback
+    );
 
     void setChatRead();
 
@@ -84,6 +87,7 @@ public interface RoxActions {
 
     void rateOperator(@Nullable String operatorId,
                       @Nullable String note,
+                      @Nullable String threadId,
                       int rate,
                       @Nullable MessageStream.RateOperatorCallback rateOperatorCallback);
 
@@ -115,6 +119,8 @@ public interface RoxActions {
     void closeSurvey(@NonNull String surveyId, @NonNull SurveyFinishCallback callback);
 
     void getLocationStatus(@NonNull String location, @NonNull DefaultCallback<LocationStatusResponse> callback);
+
+    void sendResolutionSurvey(@Nullable String id, int answer, String chatId, MessageStream.SendResolutionSurveyCallback callback);
 
     void sendGeolocation(float latitude, float longitude, @Nullable MessageStream.GeolocationCallback callback);
 }

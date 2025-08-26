@@ -10,15 +10,10 @@ import androidx.preference.PreferenceManager;
 import android.view.MenuItem;
 import android.widget.Toast;
 
-import com.google.firebase.crashlytics.FirebaseCrashlytics;
-
 import chat.rox.android.demo.util.RoxSessionDirector;
-import chat.rox.android.sdk.FatalErrorHandler;
 import chat.rox.android.sdk.Rox;
-import chat.rox.android.sdk.RoxError;
-import chat.rox.android.sdk.RoxSession;
 
-public class RoxChatActivity extends AppCompatActivity implements FatalErrorHandler {
+public class RoxChatActivity extends AppCompatActivity {
     public static final String EXTRA_SHOW_RATING_BAR_ON_STARTUP = "extra_show_rating_bar_on_startup";
     private static boolean active;
     private WidgetChatFragment fragment;
@@ -29,12 +24,21 @@ public class RoxChatActivity extends AppCompatActivity implements FatalErrorHand
 
         setContentView(R.layout.activity_rox_chat);
 
+        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+        int authUser = sharedPreferences.getInt(SettingsFragment.KEY_AUTH_VISITOR, SettingsFragment.DEFAULT_VISITOR);
+        if (authUser != SettingsFragment.DEFAULT_VISITOR) {
+            createSessionWithAuthVisitor();
+        } else {
+            createSessionWithAnonymousVisitor();
+        }
+    }
+
+    private void createSessionWithAuthVisitor() {
         RoxSessionDirector
-            .createSessionBuilderWithAnonymousVisitor(this, new RoxSessionDirector.OnSessionBuilderCreatedListener() {
+            .createSessionBuilderWithAuth2Visitor(this, new RoxSessionDirector.OnSessionBuilderCreatedListener() {
                 @Override
                 public void onSessionBuilderCreated(Rox.SessionBuilder sessionBuilder) {
-                    RoxSession session = sessionBuilder.setErrorHandler(RoxChatActivity.this).build();
-                    initFragment(session);
+                    initFragment(sessionBuilder);
                 }
 
                 @Override
@@ -44,14 +48,29 @@ public class RoxChatActivity extends AppCompatActivity implements FatalErrorHand
             });
     }
 
-    private void initFragment(RoxSession roxSession) {
+    private void createSessionWithAnonymousVisitor() {
+        RoxSessionDirector
+            .createSessionBuilderWithAnonymousVisitor(this, Rox.PushSystem.FCM, new RoxSessionDirector.OnSessionBuilderCreatedListener() {
+                @Override
+                public void onSessionBuilderCreated(Rox.SessionBuilder sessionBuilder) {
+                    initFragment(sessionBuilder);
+                }
+
+                @Override
+                public void onError(RoxSessionDirector.SessionBuilderError error) {
+                    Toast.makeText(RoxChatActivity.this, error.toString(), Toast.LENGTH_SHORT).show();
+                }
+            });
+    }
+
+    private void initFragment(Rox.SessionBuilder sessionBuilder) {
         String fragmentByTag = WidgetChatFragment.class.getSimpleName();
         WidgetChatFragment currentFragment = (WidgetChatFragment) getSupportFragmentManager().findFragmentByTag(fragmentByTag);
 
         if (currentFragment == null) {
             SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
             currentFragment = new WidgetChatFragment();
-            currentFragment.setRoxSession(roxSession);
+            currentFragment.setRoxSessionBuilder(sessionBuilder);
 
             getSupportFragmentManager()
                 .beginTransaction()
@@ -64,35 +83,6 @@ public class RoxChatActivity extends AppCompatActivity implements FatalErrorHand
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-    }
-
-    @Override
-    public void onError(@NonNull RoxError<FatalErrorType> error) {
-        switch (error.getErrorType()) {
-            case ACCOUNT_BLOCKED:
-                showError(R.string.error_account_blocked_header,
-                        R.string.error_account_blocked_desc);
-                break;
-            case VISITOR_BANNED:
-                showError(R.string.error_user_banned_header, R.string.error_user_banned_desc);
-                break;
-            default:
-                if (!BuildConfig.DEBUG) {
-                    FirebaseCrashlytics.getInstance().recordException(
-                        new Throwable("Handled unknown rox error: " + error.getErrorString()));
-                }
-                showError(R.string.error_unknown_header,
-                    R.string.error_unknown_desc, error.getErrorString());
-                break;
-        }
-    }
-
-    private void showError(int errorHeaderId, int errorDescId, String... args) {
-        getSupportFragmentManager()
-                .beginTransaction()
-                .replace(R.id.roxChatContainer,
-                        ErrorFragment.newInstance(errorHeaderId, errorDescId, args))
-                .commit();
     }
 
     @Override

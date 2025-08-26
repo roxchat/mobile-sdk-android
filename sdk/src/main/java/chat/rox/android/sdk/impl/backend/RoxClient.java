@@ -3,6 +3,8 @@ package chat.rox.android.sdk.impl.backend;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.Map;
+
 import chat.rox.android.sdk.RoxSession;
 
 public interface RoxClient {
@@ -22,4 +24,8 @@ public interface RoxClient {
     @NonNull DeltaRequestLoop getDeltaRequestLoop();
 
     void setPushToken(@NonNull String token, @Nullable RoxSession.TokenCallback callback);
+
+    void setRequestHeaders(@NonNull Map<String, String> headers);
+
+    void switchHost();
 }

@@ -9,6 +9,7 @@ import java.util.Date;
 import java.util.List;
 
 import chat.rox.android.sdk.impl.MessageReaction;
+import chat.rox.android.sdk.impl.items.AccountConfigItem;
 import chat.rox.android.sdk.impl.items.LocationSettingsItem;
 import chat.rox.android.sdk.impl.items.SuggestionItem;
 
@@ -47,12 +48,31 @@ public interface MessageStream {
     LocationSettings getLocationSettings();
 
     /**
+     * @return current AccountConfigItem of the MessageStream.
+     */
+    @Nullable
+    AccountConfigItem getAccountConfig();
+
+    /**
+     * @return current LocationSettingsItem of the MessageStream.
+     */
+    @Nullable
+    LocationSettingsItem getServerLocationSettings();
+
+    /**
      * @return previous rating of the operator or 0 if the operator was not rated before
      * @throws IllegalStateException if the RoxSession was destroyed
      * @throws RuntimeException if the method was called not from the thread the RoxSession was created in
      */
     int getLastOperatorRating(Operator.Id operatorId);
 
+    /**
+     * @return previous resolution survey answer of the operator or null if the operator was not rated before
+     * @throws IllegalStateException if the RoxSession was destroyed
+     * @throws RuntimeException if the method was called not from the thread the RoxSession was created in
+     */
+    @CustomMethod
+    Integer getLastOperatorResolutionSurveyAnswer(Operator.Id operatorId);
 
     /**
      * @return timestamp of first unread message by operator
@@ -157,12 +177,22 @@ public interface MessageStream {
     void startChat(ChatStartedCallback chatStartedCallback);
 
     /**
+     * Starts chat.
      * Changes {@link ChatState} to {@link ChatState#QUEUE}
      * @throws IllegalStateException if the RoxSession was destroyed
      * @throws RuntimeException if the method was called not from the thread {@link RoxSession}
      * was created in
      */
     void startChat();
+
+    /**
+     * Force starts chat.
+     * Changes {@link ChatState} to {@link ChatState#QUEUE}
+     * @throws IllegalStateException if the RoxSession was destroyed
+     * @throws RuntimeException if the method was called not from the thread {@link RoxSession}
+     * was created in
+     */
+    void forceStartChat();
 
     /**
      * Method returns the current chat id
@@ -190,6 +220,17 @@ public interface MessageStream {
      * was created in
      */
     void startChatWithDepartmentKey(@Nullable String departmentKey);
+
+    /**
+     * Force starts chat with particular department.
+     * Changes {@link ChatState} to {@link ChatState#QUEUE}.
+     * @see Department
+     * @param departmentKey department key
+     * @throws IllegalStateException if the RoxSession was destroyed
+     * @throws RuntimeException if the method was called not from the thread {@link RoxSession}
+     * was created in
+     */
+    void forceStartChatWithDepartmentKey(@Nullable String departmentKey);
 
     /**
      * Starts chat and sends first message simultaneously.
@@ -354,6 +395,19 @@ public interface MessageStream {
      */
     @NonNull
     Message.Id sendMessage(@NonNull String message, boolean isHintQuestion);
+
+    /**
+     * Resend a text message, that has sending status SENDING or FAILED. Note that the new
+     * message will be created.
+     * When calling this method, if there is an active {@link MessageTracker} (see
+     * @param message object with send status SENDING or FAILED
+     * @return new id of the message
+     * @throws IllegalStateException if the RoxSession was destroyed
+     * @throws RuntimeException if the method was called not from the thread the RoxSession was
+     * created in
+     */
+    @NonNull
+    Message.Id resendMessage(@NonNull Message message, @Nullable ResendMessageCallback callback);
 
     /**
      * Sends a message with file description.
@@ -543,6 +597,45 @@ public interface MessageStream {
      * @param callback shows if the call to receive location config is completed or not
      * */
     void getLocationConfig(@NonNull String location, @NonNull LocationConfigCallback callback);
+
+    /**
+     * Send resolution survey
+     * @param operatorId - operator operatorId
+     * @param answer - answer 1 or 0
+     * @param callback - shows if a send resolution survey request is completed or failed
+     * @throws IllegalStateException if the RoxSession was destroyed
+     */
+    @CustomMethod
+    void sendResolutionSurvey(@NonNull String operatorId, int answer, @Nullable SendResolutionSurveyCallback callback);
+
+    /**
+     * @see MessageStream#sendResolutionSurvey(String, int, SendResolutionSurveyCallback)
+     */
+    interface SendResolutionSurveyCallback {
+        /**
+         * Invoked when request was succeed
+         */
+        void onSuccess();
+
+        /**
+         * Invoked when some error happens while request
+         */
+        void onFailed(RoxError<SendResolutionSurveyCallback.SendResolutionError> error);
+
+        /**
+         * @see SendResolutionSurveyCallback#onFailed(RoxError)
+         */
+        enum SendResolutionError {
+            RATE_DISABLED,
+            NO_CHAT,
+            OPERATOR_NOT_IN_CHAT,
+            RESOLUTION_SURVEY_VALUE_INCORRECT,
+            RATE_FORM_MISMATCH,
+            VISITOR_SEGMENT_MISMATCH,
+            RATED_ENTITY_MISMATCH,
+            UNKNOWN
+        }
+    }
 
     /**
      * Sends geolocation to server
@@ -772,8 +865,26 @@ public interface MessageStream {
      * @throws RuntimeException if the method was called not from the thread the RoxSession was
      * created in
      */
-    void sendDialogToEmailAddress(@NonNull String email,
-                                  @NonNull SendDialogToEmailAddressCallback sendDialogToEmailAddressCallback);
+    void sendDialogToEmailAddress(
+        @NonNull String email,
+        @NonNull SendDialogToEmailAddressCallback sendDialogToEmailAddressCallback
+    );
+
+    /**
+     * Adds listener for rating operator action
+     * @param listener listener that is called when the conditions for displaying the rating bar are met
+     */
+    void addRateOperatorListener(@NonNull RateOperatorListener listener);
+
+    /**
+     * @see MessageStream#addRateOperatorListener(RateOperatorListener)
+     */
+    interface RateOperatorListener {
+        /**
+         * Called when it when needed to show rating operator bar
+         */
+        void onRateOperator();
+    }
 
     /**
      * Sets listener for greeting message
@@ -1319,6 +1430,10 @@ public interface MessageStream {
              */
             MAX_FILES_COUNT_PER_CHAT_EXCEEDED,
             /**
+             * Sent file was detected as malicious
+             */
+            MALICIOUS_FILE_DETECTED,
+            /**
              * The message has exceeded the maximum number of files.
              */
             MAX_FILES_COUNT_PER_MESSAGE,
@@ -1401,6 +1516,18 @@ public interface MessageStream {
         }
     }
 
+    interface ResendMessageCallback {
+        /**
+         * Called if message was resent successfully.
+         */
+        void onSuccess();
+
+        /**
+         * Called if message resend request failed.
+         */
+        void onFailure();
+    }
+
     /**
      * @see MessageStream#rateOperator(Operator.Id, int, RateOperatorCallback)
      */
@@ -1433,7 +1560,11 @@ public interface MessageStream {
             /**
              * Note length is more than 2000 characters.
              */
-            NOTE_IS_TOO_LONG
+            NOTE_IS_TOO_LONG,
+            /**
+             * When operator rating is disable on server side. See your account config.
+             */
+            OPERATOR_RATING_DISABLE_ON_SERVER
         }
     }
 

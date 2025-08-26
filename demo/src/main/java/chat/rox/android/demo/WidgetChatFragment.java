@@ -21,11 +21,13 @@ import com.bumptech.glide.Glide;
 import java.util.ArrayList;
 
 import chat.rox.android.sdk.Operator;
+import chat.rox.android.sdk.Rox;
 import chat.rox.android.sdk.RoxSession;
 import chat.rox.chatview.ui.ChatView;
 import chat.rox.chatview.utils.FileHelper;
 
 public class WidgetChatFragment extends Fragment {
+    private Rox.SessionBuilder sessionBuilder;
     private RoxSession session;
     private ChatView chatView;
 
@@ -35,6 +37,9 @@ public class WidgetChatFragment extends Fragment {
         View rootView = inflater.inflate(R.layout.fragment_widget_chat, container, false);
 
         chatView = rootView.findViewById(R.id.chatView);
+        sessionBuilder.setErrorHandler(chatView);
+        session = sessionBuilder.build();
+
         chatView.setSession(session);
 
         setPreChatActions();
@@ -43,11 +48,23 @@ public class WidgetChatFragment extends Fragment {
         return rootView;
     }
 
-    public void setRoxSession(RoxSession session) {
-        if (this.session != null) {
+    @Override
+    public void onStart() {
+        super.onStart();
+        chatView.setAutoScrollToLastMsgEnabled(true);
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        chatView.setAutoScrollToLastMsgEnabled(false);
+    }
+
+    public void setRoxSessionBuilder(Rox.SessionBuilder session) {
+        if (this.sessionBuilder != null) {
             throw new IllegalStateException("Rox session is already set");
         }
-        this.session = session;
+        this.sessionBuilder = session;
     }
 
     private void setPreChatActions() {

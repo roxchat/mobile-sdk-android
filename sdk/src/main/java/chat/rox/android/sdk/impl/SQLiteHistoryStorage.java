@@ -1,30 +1,22 @@
 package chat.rox.android.sdk.impl;
 
 import android.content.Context;
+import android.database.Cursor;
+import android.database.SQLException;
+import android.database.sqlite.SQLiteConstraintException;
+import android.database.sqlite.SQLiteException;
 import android.os.Handler;
 
 import androidx.annotation.NonNull;
 
 import com.google.gson.reflect.TypeToken;
 
-import net.sqlcipher.Cursor;
-import net.sqlcipher.SQLException;
-import net.sqlcipher.database.SQLiteConstraintException;
-import net.sqlcipher.database.SQLiteDatabase;
-import net.sqlcipher.database.SQLiteDatabaseHook;
-import net.sqlcipher.database.SQLiteException;
-import net.sqlcipher.database.SQLiteOpenHelper;
-import net.sqlcipher.database.SQLiteStatement;
-
-import chat.rox.android.sdk.Message;
-import chat.rox.android.sdk.MessageTracker;
-import chat.rox.android.sdk.Rox;
-import chat.rox.android.sdk.RoxLogEntity;
-import chat.rox.android.sdk.impl.backend.RoxInternalLog;
-import chat.rox.android.sdk.impl.items.KeyboardItem;
-import chat.rox.android.sdk.impl.items.KeyboardRequestItem;
-import chat.rox.android.sdk.impl.items.MessageItem;
-import chat.rox.android.sdk.impl.items.StickerItem;
+import net.zetetic.database.DatabaseErrorHandler;
+import net.zetetic.database.sqlcipher.SQLiteConnection;
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
+import net.zetetic.database.sqlcipher.SQLiteDatabaseHook;
+import net.zetetic.database.sqlcipher.SQLiteOpenHelper;
+import net.zetetic.database.sqlcipher.SQLiteStatement;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -36,13 +28,23 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import chat.rox.android.sdk.Message;
+import chat.rox.android.sdk.MessageTracker;
+import chat.rox.android.sdk.Rox;
+import chat.rox.android.sdk.RoxLogEntity;
+import chat.rox.android.sdk.impl.backend.RoxInternalLog;
+import chat.rox.android.sdk.impl.items.KeyboardItem;
+import chat.rox.android.sdk.impl.items.KeyboardRequestItem;
+import chat.rox.android.sdk.impl.items.MessageGroup;
+import chat.rox.android.sdk.impl.items.StickerItem;
+
 public class SQLiteHistoryStorage implements HistoryStorage {
     private static final Executor executor = new ThreadPoolExecutor(0, 1, 60,
             TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
     private static final Message.Type[] MESSAGE_TYPES = Message.Type.values();
     private static final String INSERT_HISTORY_STATEMENT = "INSERT OR FAIL INTO history " +
-            "(msg_id, " +
-            "client_side_id, " +
+            "(client_side_id, " +
+            "msg_id, " +
             "ts, " +
             "sender_id, " +
             "sender_name, " +
@@ -52,11 +54,12 @@ public class SQLiteHistoryStorage implements HistoryStorage {
             "data, " +
             "quote," +
             "can_be_replied," +
-            "reaction)" +
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
+            "reaction," +
+            "status)" +
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
     private static final String UPDATE_HISTORY_STATEMENT = "UPDATE history " +
             "SET " +
-            "client_side_id=?, " +
+            "msg_id=?, " +
             "ts=?, " +
             "sender_id=?, " +
             "sender_name=?, " +
@@ -66,11 +69,15 @@ public class SQLiteHistoryStorage implements HistoryStorage {
             "data=?, " +
             "quote=?, " +
             "can_be_replied=?, " +
-            "reaction=?" +
-            "WHERE msg_id=?";
+            "reaction=?," +
+            "status=?" +
+            "WHERE client_side_id=?";
     private static final String DELETE_HISTORY_STATEMENT = "DELETE FROM history " +
-            "WHERE msg_id=?";
-    private static final int VERSION = 13;
+            "WHERE client_side_id=?";
+    private static final String GET_SENDING_MESSAGES_QUERY = "SELECT * FROM history " +
+        "WHERE status='SENDING' ORDER BY ts";
+    private static final int VERSION = 15;
+    private static final int MIGRATION_VERSION = 15;
 
     private final MyDBHelper dbHelper;
     private final Handler handler;
@@ -80,7 +87,6 @@ public class SQLiteHistoryStorage implements HistoryStorage {
     private long firstKnownTs = -1;
     private FileUrlCreator fileUrlCreator;
     private long readBeforeTimestamp;
-    private String databasePassword;
     private ReadBeforeTimestampListener readBeforeTimestampListener
             = new ReadBeforeTimestampListener() {
         @Override
@@ -92,29 +98,30 @@ public class SQLiteHistoryStorage implements HistoryStorage {
     };
     private final RoxInternalLog logger = RoxInternalLog.getInstance();
 
-    public SQLiteHistoryStorage(Context context,
-                                Handler handler,
-                                String dbName,
-                                String serverUrl,
-                                boolean isReachedEndOfRemoteHistory,
-                                FileUrlCreator fileUrlCreator,
-                                long readBeforeTimestamp,
-                                String databasePassword) {
-        this.dbHelper = new MyDBHelper(context, dbName);
+    public SQLiteHistoryStorage(
+        Context context,
+        Handler handler,
+        String dbName,
+        String serverUrl,
+        boolean isReachedEndOfRemoteHistory,
+        FileUrlCreator fileUrlCreator,
+        long readBeforeTimestamp,
+        String databasePassword
+    ) {
+        this.dbHelper = new MyDBHelper(context, dbName, databasePassword);
         this.handler = handler;
         this.serverUrl = serverUrl;
         this.isReachedEndOfRemoteHistory = isReachedEndOfRemoteHistory;
         this.fileUrlCreator = fileUrlCreator;
         this.readBeforeTimestamp = readBeforeTimestamp;
-        this.databasePassword = databasePassword;
 
-        SQLiteDatabase.loadLibs(context);
+        System.loadLibrary("sqlcipher");
     }
 
     private void prepare() throws SQLiteException {
         if (!prepared) {
             prepared = true;
-            SQLiteDatabase db = dbHelper.getWritableDatabase(databasePassword);
+            SQLiteDatabase db = dbHelper.getWritableDatabase();
             Cursor c = db.rawQuery(
                 "SELECT ts FROM HISTORY ORDER BY ts ASC LIMIT 1",
                 new String[0]);
@@ -147,7 +154,7 @@ public class SQLiteHistoryStorage implements HistoryStorage {
             SQLiteDatabase db;
             try {
                 prepare();
-                db = dbHelper.getWritableDatabase(databasePassword);
+                db = dbHelper.getWritableDatabase();
             } catch (SQLiteException exception) {
                 logger.log(
                     "Unable open database. " + exception,
@@ -172,7 +179,7 @@ public class SQLiteHistoryStorage implements HistoryStorage {
                             "SELECT * FROM history WHERE ts > ? ORDER BY ts ASC LIMIT 1",
                             new String[]{Long.toString(message.getTimeMicros())});
                     try {
-                        insertStatement.bindString(1, message.getServerSideId());
+                        insertStatement.bindString(1, message.getClientSideId().toString());
                         bindMessageFields(insertStatement, 2, message);
                         insertStatement.executeInsert();
 
@@ -180,7 +187,7 @@ public class SQLiteHistoryStorage implements HistoryStorage {
                         runMessageAdded(callback, beforeId, message);
                     } catch (SQLiteConstraintException ignored) {
                         bindMessageFields(updateStatement, 1, message);
-                        updateStatement.bindString(MyDBHelper.COLUMN_COUNT, message.getServerSideId());
+                        updateStatement.bindString(MyDBHelper.COLUMN_COUNT, message.getClientSideId().toString());
                         updateStatement.executeUpdateDelete();
                         runMessageChanged(callback, message);
                     } catch (SQLException e) {
@@ -219,8 +226,12 @@ public class SQLiteHistoryStorage implements HistoryStorage {
     private static void bindMessageFields(SQLiteStatement statement,
                                           int index,
                                           MessageImpl message) {
-        // Binding to client_side_id
-        statement.bindString(index, message.getClientSideId().toString());
+        // Binding to serverSideId
+        if (message.getServerSideId() != null) {
+            statement.bindString(index, message.getServerSideId());
+        } else {
+            statement.bindNull(index);
+        }
 
         // Binding to ts
         statement.bindLong((index + 1), message.getTimeMicros());
@@ -249,17 +260,25 @@ public class SQLiteHistoryStorage implements HistoryStorage {
         statement.bindString((index + 6), message.getText());
 
         // Binding to data
+        Message.Attachment attachment = message.getAttachment();
+        Message.Sticker sticker = message.getSticker();
         String data = message.getData();
-        if (data == null) {
-            statement.bindNull(index + 7);
-        } else {
+        if (attachment != null) {
+            data = InternalUtils.convertToString(attachment);
             statement.bindString((index + 7), data);
+        } else if (sticker != null) {
+            data = InternalUtils.convertToString(sticker);
+            statement.bindString((index + 7), data);
+        } else if (data != null) {
+            statement.bindString((index + 7), data);
+        } else {
+            statement.bindNull(index + 7);
         }
 
         // Binding to quote
         Message.Quote quote = message.getQuote();
         if (quote != null) {
-            statement.bindString((index + 8), data);
+            statement.bindString((index + 8), InternalUtils.convertToString(quote));
         }
 
         // Binding to can_be_replied
@@ -272,6 +291,12 @@ public class SQLiteHistoryStorage implements HistoryStorage {
         } else {
             statement.bindString(index + 10, reaction.value);
         }
+
+        // Binding send status
+        Message.SendStatus sendStatus = message.getSendStatus();
+        String statusName = sendStatus.name();
+        statement.bindString(index + 11, statusName);
+        System.out.println();
     }
 
     private static int messageTypeToId(Message.Type type) {
@@ -283,8 +308,8 @@ public class SQLiteHistoryStorage implements HistoryStorage {
     }
 
     private MessageImpl createMessage(Cursor cursor) {
-        String serverSideId = cursor.getString(0);
-        String clientSideId = cursor.getString(1);
+        String clientSideId = cursor.getString(0);
+        String serverSideId = cursor.getString(1);
         long timestamp = cursor.getLong(2);
         String avatar = cursor.getString(5);
         Message.Type type = idToMessageType(cursor.getInt(6));
@@ -293,12 +318,15 @@ public class SQLiteHistoryStorage implements HistoryStorage {
         String rawQuote = cursor.getString(9);
         boolean canBeReplied = cursor.getLong(10) == 1; // this boolean field save in db as 1 or 0
         MessageReaction reaction = cursor.isNull(11) ? null : valueToMessageReaction(cursor.getString(11));
+        String status = cursor.getString(12);
 
         Message.Attachment attachment = null;
-        if (rawText != null) {
+        if (type == Message.Type.FILE_FROM_OPERATOR || type == Message.Type.FILE_FROM_VISITOR) {
             try {
-                MessageItem messageItem = InternalUtils.fromJson(rawText, MessageItem.class);
-                attachment = InternalUtils.getAttachment(messageItem, fileUrlCreator);
+                attachment = InternalUtils.fromJson(rawText, MessageImpl.AttachmentImpl.class);
+                if (attachment != null) {
+                    provideUrlCreatorToAttach(attachment);
+                }
             } catch (Exception e) {
                 RoxInternalLog.getInstance().log(
                     "Failed to parse file params for message: " + serverSideId + ", text: " + text + ". " + e,
@@ -307,11 +335,23 @@ public class SQLiteHistoryStorage implements HistoryStorage {
             }
         }
 
+        MessageGroup.GroupData groupData = null;
+        try {
+            MessageGroup messageGroup = InternalUtils.fromJson(rawText, MessageGroup.class);
+            if (messageGroup != null) {
+                groupData = messageGroup.getGroupData();
+            }
+        } catch (Throwable throwable) {
+            RoxInternalLog.getInstance().log(
+                "Failed to parse file params for message: " + serverSideId + ", text: " + text + ". " + throwable,
+                Rox.SessionBuilder.RoxLogVerbosityLevel.ERROR,
+                RoxLogEntity.DATABASE);
+        }
+
         Message.Quote quote = null;
         if (rawQuote != null) {
             try {
-                MessageItem.Quote quoteParams = InternalUtils.fromJson(rawQuote, MessageItem.Quote.class);
-                quote = InternalUtils.getQuote(quoteParams, fileUrlCreator);
+                quote = InternalUtils.fromJson(rawQuote, MessageImpl.QuoteImpl.class);
             } catch (Exception e) {
                 RoxInternalLog.getInstance().log(
                     "Failed to parse quote params for message: " + serverSideId + ", text: " + text + ". " + e,
@@ -364,33 +404,102 @@ public class SQLiteHistoryStorage implements HistoryStorage {
 
         boolean isRead = timestamp <= readBeforeTimestamp || readBeforeTimestamp == -1;
 
+        Message.SendStatus sendStatus;
+        try {
+            sendStatus = Message.SendStatus.valueOf(status);
+        } catch (IllegalArgumentException exception) {
+            sendStatus = Message.SendStatus.SENT;
+        }
+
+        switch (sendStatus) {
+            case SENDING: {
+                return createSendingMessage(cursor, clientSideId, timestamp, type, text, attachment, quote, sticker);
+            }
+            case FAILED: {
+                return createFailedMessage(cursor, clientSideId, timestamp, type, text, attachment, quote, sticker);
+            }
+            default: {
+                return createSentMessage(cursor, clientSideId, serverSideId, timestamp, avatar, type, text, rawText, canBeReplied, reaction, attachment, quote, keyboardButton, keyboardRequest, sticker, isRead, groupData, sendStatus);
+            }
+        }
+    }
+
+    private void provideUrlCreatorToAttach(@NonNull Message.Attachment attachment) {
+        Message.FileInfo fileInfo = attachment.getFileInfo();
+        if (!(fileInfo instanceof MessageImpl.FileInfoImpl)) {
+            return;
+        }
+        ((MessageImpl.FileInfoImpl) fileInfo).setFileUrlCreator(fileUrlCreator);
+
+        Message.ImageInfo imageInfo = fileInfo.getImageInfo();
+        if (!(imageInfo instanceof MessageImpl.ImageInfoImpl)) {
+            return;
+        }
+        ((MessageImpl.ImageInfoImpl) imageInfo).setFileUrlCreator(fileUrlCreator);
+    }
+
+    @NonNull
+    private MessageSending createSendingMessage(Cursor cursor, String clientSideId, long timestamp, Message.Type type, String text, Message.Attachment attachment, Message.Quote quote, Message.Sticker sticker) {
+        return new MessageSending(
+            serverUrl,
+            StringId.forMessage(clientSideId),
+            cursor.getString(4),
+            type,
+            text,
+            timestamp,
+            quote,
+            sticker,
+            attachment
+        );
+    }
+
+    @NonNull
+    private MessageFailed createFailedMessage(Cursor cursor, String clientSideId, long timestamp, Message.Type type, String text, Message.Attachment attachment, Message.Quote quote, Message.Sticker sticker) {
+        return new MessageFailed(
+            serverUrl,
+            StringId.forMessage(clientSideId),
+            cursor.getString(4),
+            type,
+            text,
+            timestamp,
+            quote,
+            sticker,
+            attachment
+        );
+    }
+
+    @NonNull
+    private MessageImpl createSentMessage(Cursor cursor, String clientSideId, String serverSideId, long timestamp, String avatar, Message.Type type, String text, String rawText, boolean canBeReplied, MessageReaction reaction, Message.Attachment attachment, Message.Quote quote, Message.Keyboard keyboardButton, Message.KeyboardRequest keyboardRequest, Message.Sticker sticker, boolean isRead, MessageGroup.GroupData groupData, Message.SendStatus sendStatus) {
         return new MessageImpl(
-                serverUrl,
-                StringId.forMessage(clientSideId),
-                null,
-                cursor.isNull(3)
-                        ? null
-                        : StringId.forOperator(Long.toString(cursor.getLong(3))),
-                avatar,
-                cursor.getString(4),
-                type,
-                text,
-                timestamp,
-                serverSideId,
-                rawText,
-                true,
-                attachment,
-                isRead,
-                false,
-                canBeReplied,
-                false,
-                quote,
-                keyboardButton,
-                keyboardRequest,
-                sticker,
-                reaction,
-                false,
-                false);
+            serverUrl,
+            StringId.forMessage(clientSideId),
+            null,
+            cursor.isNull(3)
+                ? null
+                : StringId.forOperator(Long.toString(cursor.getLong(3))),
+            avatar,
+            cursor.getString(4),
+            type,
+            text,
+            timestamp,
+            serverSideId,
+            rawText,
+            true,
+            attachment,
+            isRead,
+            false,
+            canBeReplied,
+            false,
+            quote,
+            keyboardButton,
+            keyboardRequest,
+            sticker,
+            reaction,
+            false,
+            false,
+            groupData,
+            sendStatus
+        );
     }
 
     private MessageReaction valueToMessageReaction(String value) {
@@ -428,7 +537,7 @@ public class SQLiteHistoryStorage implements HistoryStorage {
             SQLiteDatabase db;
             try {
                 prepare();
-                db = dbHelper.getWritableDatabase(databasePassword);
+                db = dbHelper.getWritableDatabase();
             } catch (SQLiteException exception) {
                 logger.log(
                     "Unable open database. " + exception,
@@ -444,7 +553,7 @@ public class SQLiteHistoryStorage implements HistoryStorage {
                     newFirstKnownTs = Math.min(newFirstKnownTs,
                         message.getTimeMicros());
                     try {
-                        insertStatement.bindString(1, message.getServerSideId());
+                        insertStatement.bindString(1, message.getClientSideId().toString());
                         bindMessageFields(insertStatement, 2, message);
                         insertStatement.executeInsert();
                     } catch (SQLException e) {
@@ -469,7 +578,7 @@ public class SQLiteHistoryStorage implements HistoryStorage {
                           @NonNull final MessageTracker.GetMessagesCallback callback) {
         executor.execute(() -> {
             List<Message> list = new ArrayList<>();
-            try(SQLiteDatabase db = dbHelper.getWritableDatabase(databasePassword);
+            try (SQLiteDatabase db = dbHelper.getWritableDatabase();
                 Cursor c = db.rawQuery(
                     "SELECT * FROM history ORDER BY ts DESC LIMIT ?",
                     new String[]{Integer.toString(limit)})
@@ -487,7 +596,7 @@ public class SQLiteHistoryStorage implements HistoryStorage {
     public void getFull(@NonNull final MessageTracker.GetMessagesCallback callback) {
         executor.execute(() -> {
             List<Message> messageList = new ArrayList<>();
-            try (SQLiteDatabase db = dbHelper.getWritableDatabase(databasePassword);
+            try (SQLiteDatabase db = dbHelper.getWritableDatabase();
                  Cursor cursor = db.rawQuery("SELECT * FROM history ORDER BY ts ASC", new String[]{})) {
                 while (cursor.moveToNext()) {
                     messageList.add(createMessage(cursor));
@@ -505,7 +614,7 @@ public class SQLiteHistoryStorage implements HistoryStorage {
             @Override
             public void run() {
                 List<Message> list = new ArrayList<>();
-                try (SQLiteDatabase db = dbHelper.getWritableDatabase(databasePassword);
+                try (SQLiteDatabase db = dbHelper.getWritableDatabase();
                      Cursor c = db.rawQuery(
                          "SELECT * FROM history WHERE ts < ? ORDER BY ts DESC LIMIT ?",
                          new String[]{Long.toString(beforeTimestamp), Integer.toString(limit)})
@@ -521,9 +630,27 @@ public class SQLiteHistoryStorage implements HistoryStorage {
     }
 
     @Override
+    public void getSending(@NonNull MessageTracker.GetMessagesCallback callback) {
+        executor.execute(() -> {
+            List<Message> list = new ArrayList<>();
+            try (SQLiteDatabase db = dbHelper.getWritableDatabase();
+                 Cursor cursor = db.rawQuery(
+                     GET_SENDING_MESSAGES_QUERY,
+                     new String[] {}
+                 )
+            ) {
+                while (cursor.moveToNext()) {
+                    list.add(createMessage(cursor));
+                }
+            }
+            runMessageList(callback, list);
+        });
+    }
+
+    @Override
     public void clearHistory() {
         executor.execute(() -> {
-            try (SQLiteDatabase db = dbHelper.getWritableDatabase(databasePassword)) {
+            try (SQLiteDatabase db = dbHelper.getWritableDatabase()) {
                 db.execSQL("delete from history");
             } catch (SQLException exception) {
                 RoxInternalLog.getInstance().log(
@@ -541,11 +668,11 @@ public class SQLiteHistoryStorage implements HistoryStorage {
     }
 
     private static class MyDBHelper extends SQLiteOpenHelper {
-        private static final int COLUMN_COUNT = 12;
+        private static final int COLUMN_COUNT = 13;
         private static final String CREATE_TABLE = "CREATE TABLE history\n"
                 + "(\n"
-                + "    msg_id VARCHAR(64) PRIMARY KEY NOT NULL,\n"
-                + "    client_side_id VARCHAR(64),\n"
+                + "    client_side_id VARCHAR(64) PRIMARY KEY NOT NULL,\n"
+                + "    msg_id VARCHAR(64),\n"
                 + "    ts BIGINT  NOT NULL,\n"
                 + "    sender_id VARCHAR(64),\n"
                 + "    sender_name VARCHAR(255) NOT NULL,\n"
@@ -555,22 +682,29 @@ public class SQLiteHistoryStorage implements HistoryStorage {
                 + "    data TEXT,\n"
                 + "    quote TEXT,\n"
                 + "    can_be_replied TINYINT NOT NULL,\n"
-                + "    reaction VARCHAR(32)"
+                + "    reaction VARCHAR(32),\n"
+                + "    status VARCHAR(32)"
                 + "); CREATE UNIQUE INDEX history_ts ON history (ts)";
         private static final SQLiteDatabaseHook mHook = new SQLiteDatabaseHook() {
-            public void preKey(SQLiteDatabase database) {
+            @Override
+            public void preKey(SQLiteConnection connection) {
             }
 
-            public void postKey(SQLiteDatabase database) {
-                database.rawExecSQL("PRAGMA cipher_compatibility=3;");
-                database.rawExecSQL("PRAGMA kdf_iter=1000;");
-                database.rawExecSQL("PRAGMA cipher_default_kdf_iter=1000;");
-                database.rawExecSQL("PRAGMA cipher_page_size = 4096;");
+            @Override
+            public void postKey(SQLiteConnection connection) {
+                // connection.execute("PRAGMA cipher_compatibility=3;", null, null);
+                connection.execute("PRAGMA kdf_iter=1000;", null, null);
+                connection.execute("PRAGMA cipher_default_kdf_iter=1000;", null, null);
+                connection.execute("PRAGMA cipher_page_size = 4096;", null, null);
             }
         };
+        private static final DatabaseErrorHandler databaseErrorHandler = (dbObj, exception) -> {
+            String message = exception.getMessage();
+            RoxInternalLog.getInstance().log(message != null ? message : "Sqlite Error: " + exception.getClass().getSimpleName(), Rox.SessionBuilder.RoxLogVerbosityLevel.ERROR, RoxLogEntity.DATABASE);
+        };
 
-        public MyDBHelper(Context context, String dbName) {
-            super(context, dbName, null, VERSION, mHook);
+        public MyDBHelper(Context context, String dbName, String databasePassword) {
+            super(context, dbName, databasePassword, null, VERSION, MIGRATION_VERSION, databaseErrorHandler, mHook, false);
         }
 
         @Override

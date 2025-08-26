@@ -29,7 +29,7 @@ public class MainActivity extends AppCompatActivity implements MainFragment.Main
     protected void onStart() {
         super.onStart();
 
-        RoxSessionDirector.createSessionBuilderWithAnonymousVisitor(this, new RoxSessionDirector.OnSessionBuilderCreatedListener() {
+        RoxSessionDirector.createSessionBuilderWithAnonymousVisitor(this, Rox.PushSystem.FCM, new RoxSessionDirector.OnSessionBuilderCreatedListener() {
                 @Override
                 public void onSessionBuilderCreated(Rox.SessionBuilder sessionBuilder) {
                     RoxSession session = sessionBuilder.build();

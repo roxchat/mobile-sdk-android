@@ -1,9 +1,11 @@
-package chat.rox.android.demo.util;
+package chat.rox.chatview.utils;
 
+import android.content.Context;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
+import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,8 +24,8 @@ import androidx.annotation.Nullable;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
-import chat.rox.android.demo.R;
 import chat.rox.android.sdk.Survey;
+import chat.rox.chatview.R;
 
 import java.util.List;
 
@@ -40,6 +42,11 @@ public class SurveyDialog extends BottomSheetDialogFragment {
     private Button sendButton;
     private int radioButtonPadding;
     private String answer;
+    private int customStyle;
+
+    public SurveyDialog(int styleRes) {
+        customStyle = styleRes;
+    }
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -51,13 +58,17 @@ public class SurveyDialog extends BottomSheetDialogFragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
 
-        View rootView = inflater.inflate(R.layout.dialog_survey, container, false);
+        Context themedContext = new ContextThemeWrapper(getContext(), customStyle);
+        View rootView = LayoutInflater.from(themedContext).inflate(R.layout.dialog_survey, container, false);
 
         initViews(rootView);
         initViewListeners();
         initBottomBehavior();
         initSendButton();
         initCloseButton();
+        if (currentQuestion != null) {
+            setLayout();
+        }
 
         return rootView;
     }
@@ -132,11 +143,12 @@ public class SurveyDialog extends BottomSheetDialogFragment {
 
     public void setCurrentQuestion(Survey.Question currentQuestion) {
         this.currentQuestion = currentQuestion;
-        setLayout();
+        if (getView() != null) {
+            setLayout();
+        }
     }
 
     private void setLayout() {
-
         radioGroup.setVisibility(View.GONE);
         ratingBar.setVisibility(View.GONE);
         editText.setVisibility(View.GONE);

@@ -2,6 +2,8 @@ package chat.rox.android.sdk;
 
 import androidx.annotation.NonNull;
 
+import java.util.Map;
+
 public interface RoxSession {
 
     /**
@@ -58,6 +60,12 @@ public interface RoxSession {
      * @param tokenCallback - tokenCallback shows if a call is completed or failed.
      */
     void removePushToken(@NonNull TokenCallback tokenCallback);
+
+    /**
+     * This method allows you to manually set request headers.
+     * @param headers https headers
+     */
+    void setRequestHeaders(@NonNull Map<String, String> headers);
 
     /**
      * @see RoxSession#removePushToken(TokenCallback tokenCallback)

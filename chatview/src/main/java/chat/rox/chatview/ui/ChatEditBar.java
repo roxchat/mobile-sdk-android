@@ -5,6 +5,7 @@ import static chat.rox.android.sdk.Message.Type.VISITOR;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Fragment;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -28,14 +29,7 @@ import android.widget.RatingBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.result.ActivityResult;
-import androidx.activity.result.ActivityResultCallback;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentActivity;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
@@ -44,13 +38,12 @@ import chat.rox.android.sdk.BuildConfig;
 import chat.rox.android.sdk.Message;
 import chat.rox.android.sdk.MessageStream;
 import chat.rox.android.sdk.Operator;
-import chat.rox.chatview.ChatHolderActionsImpl;
 import chat.rox.chatview.R;
 import chat.rox.chatview.utils.AnchorMenuDialog;
 import chat.rox.chatview.utils.FileHelper;
 import chat.rox.chatview.utils.ViewUtils;
 
-public class ChatEditBar extends LinearLayout implements ActivityResultCallback<ActivityResult> {
+public class ChatEditBar extends LinearLayout {
     private MessageStream stream;
     private State state;
     private ChatList.ListController listController;
@@ -79,32 +72,62 @@ public class ChatEditBar extends LinearLayout implements ActivityResultCallback<
     private Message editedMessage = null;
     private Message quotedMessage = null;
     private FileHelper fileHelper;
+    private final FilePickerFragment.DataUriProvider dataUriProvider = new FilePickerFragment.DataUriProvider() {
+        @Override
+        public void provideFileUri(Uri data) {
+            if (data != null) {
+                fileHelper.sendFileWithNewTemp(data);
+            }
+        }
+    };
 
     public static class FilePickerFragment extends Fragment {
-        private ActivityResultCallback<ActivityResult> callback;
+        private DataUriProvider callback;
+
+        interface DataUriProvider {
+            void provideFileUri(Uri data);
+        }
 
         @Override
         public void onCreate(Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
             setRetainInstance(true); // Must be set to true
 
-            ActivityResultLauncher<Intent> launcher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), new ActivityResultCallback<ActivityResult>() {
-                @Override
-                public void onActivityResult(ActivityResult result) {
-                    if (callback == null) {
-                        Log.e(getClass().getSimpleName(), "Callback is null");
-                        return;
-                    }
-                    callback.onActivityResult(result);
 
-                    FilePickerFragment currentFragment = FilePickerFragment.this;
-                    currentFragment.getParentFragmentManager()
-                        .beginTransaction()
-                        .remove(currentFragment)
-                        .commit();
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("*/*");
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+
+            try {
+                startActivityForResult(intent, 100);
+            } catch (android.content.ActivityNotFoundException e) {
+                Log.e("Rox", "Can't find activity with intent: " + intent.toString());
+            }
+        }
+
+        @Override
+        public void onActivityResult(int requestCode, int resultCode, Intent data) {
+            super.onActivityResult(requestCode, resultCode, data);
+
+            if (callback == null) {
+                Log.e(getClass().getSimpleName(), "Callback is null");
+                return;
+            }
+
+            if (resultCode == Activity.RESULT_OK) {
+                if (data != null) {
+                    Uri uri = data.getData();
+                    if (uri != null) {
+                        callback.provideFileUri(uri);
+                    }
                 }
-            });
-            FileHelper.openFilePicker(launcher);
+            }
+
+            FilePickerFragment currentFragment = FilePickerFragment.this;
+            currentFragment.getFragmentManager()
+                .beginTransaction()
+                .remove(currentFragment)
+                .commit();
         }
 
         @Override
@@ -113,23 +136,18 @@ public class ChatEditBar extends LinearLayout implements ActivityResultCallback<
             callback = null;
         }
 
-        public void setCallback(ActivityResultCallback<ActivityResult> callback) {
+        public void setCallback(DataUriProvider callback) {
             this.callback = callback;
         }
 
-        public static FilePickerFragment create(Context context, ActivityResultCallback<ActivityResult> callback) {
+        public static FilePickerFragment create(Context context, DataUriProvider callback) {
             Activity requiredActivity = ViewUtils.getRequiredActivity(context);
-            if (!(requiredActivity instanceof AppCompatActivity)) {
-                Log.e(ChatHolderActionsImpl.class.getSimpleName(), "Host activity must be inherited from " + AppCompatActivity.class.getSimpleName() + " for opening image detail screen");
-                return null;
-            }
 
             FilePickerFragment filePickerFragment = new FilePickerFragment();
             filePickerFragment.setCallback(callback);
-            FragmentActivity activity = (FragmentActivity) requiredActivity;
-            activity.getSupportFragmentManager()
+            requiredActivity.getFragmentManager()
                 .beginTransaction()
-                .add(filePickerFragment, null)
+                .add(filePickerFragment, "FilePickerFragment")
                 .commit();
 
             return filePickerFragment;
@@ -224,9 +242,12 @@ public class ChatEditBar extends LinearLayout implements ActivityResultCallback<
     private void showChatDialog() {
         AnchorMenuDialog chatMenuDialog = new AnchorMenuDialog(getContext());
         this.chatMenuDialog = chatMenuDialog;
+        float disableAlpha = 0.6f;
+
+        chatMenuDialog.setDisableOpacity(disableAlpha);
         chatMenuDialog.setOnMenuItemClickListener(itemId -> {
             if (itemId == R.id.relLay_new_attachment) {
-                FilePickerFragment.create(getContext(), this);
+                FilePickerFragment.create(getContext(), dataUriProvider);
             } else if (itemId == R.id.relLay_rate_operator) {
                 showRatingDialog();
             }
@@ -235,7 +256,10 @@ public class ChatEditBar extends LinearLayout implements ActivityResultCallback<
         Animation animationRotateShow = AnimationUtils.loadAnimation(getContext(), R.anim.rotate_show);
         Animation animationRotateHide = AnimationUtils.loadAnimation(getContext(), R.anim.rotate_hide);
         chatMenuDialog.setOnShowListener(dialog -> {
-            chatMenuDialog.enableItem(R.id.relLay_rate_operator, stream.getCurrentOperator() != null);
+            chatMenuDialog.enableItem(
+                R.id.relLay_rate_operator,
+                stream.getCurrentOperator() != null && stream.getAccountConfig() != null && stream.getAccountConfig().isRateOperator()
+            );
             chatMenuButton.startAnimation(animationRotateShow);
         });
         chatMenuDialog.setOnDismissListener(dialog -> chatMenuButton.startAnimation(animationRotateHide));
@@ -259,10 +283,13 @@ public class ChatEditBar extends LinearLayout implements ActivityResultCallback<
         if (operator != null) {
             final Operator.Id operatorId = operator.getId();
             int rating = stream.getLastOperatorRating(operatorId);
-            ratingBar.setOnRatingBarChangeListener((ratingBar, rating1, fromUser) -> ratingButton.setEnabled(rating1 != 0));
             ratingBar.setRating(rating);
-            ratingButton.setEnabled(rating != 0);
-            ratingDialog.show();
+            boolean isRatingAllowed = stream.getAccountConfig() != null && stream.getAccountConfig().isRateOperator();
+            ratingBar.setOnRatingBarChangeListener((ratingBar, rating1, fromUser) -> {
+                if (isRatingAllowed) ratingButton.setEnabled(rating1 != 0);
+            });
+
+            ratingButton.setEnabled(rating != 0 && isRatingAllowed);
             ratingButton.setOnClickListener(v -> {
                 if (ratingBar.getRating() != 0) {
                     ratingDialog.dismiss();
@@ -272,6 +299,8 @@ public class ChatEditBar extends LinearLayout implements ActivityResultCallback<
                     Toast.makeText(getContext(), R.string.rate_operator_rating_empty, Toast.LENGTH_LONG).show();
                 }
             });
+
+            ratingDialog.show();
         }
     }
 
@@ -284,19 +313,6 @@ public class ChatEditBar extends LinearLayout implements ActivityResultCallback<
             chatMenuDialog.dismiss();
             Animation animationRotateHide = AnimationUtils.loadAnimation(getContext(), R.anim.rotate_hide);
             chatMenuButton.startAnimation(animationRotateHide);
-        }
-    }
-
-    @Override
-    public void onActivityResult(ActivityResult result) {
-        if (result.getResultCode() == Activity.RESULT_OK) {
-            Intent intent = result.getData();
-            if (intent != null) {
-                Uri uri = intent.getData();
-                if (uri != null) {
-                    fileHelper.sendFileWithDescriptor(uri);
-                }
-            }
         }
     }
 
@@ -404,24 +420,18 @@ public class ChatEditBar extends LinearLayout implements ActivityResultCallback<
 
         stream.setChatStateListener((oldState, newState) -> {
             switch (newState) {
-                case CLOSED_BY_OPERATOR:
-                case CLOSED_BY_VISITOR:
-                    if (shouldRateOperator()) {
-                        showRatingDialog();
-                    }
-                    break;
                 case NONE:
                     if (ratingDialog.isShowing()) {
                         ratingDialog.dismiss();
                     }
                     break;
             }
-        });
-    }
 
-    private boolean shouldRateOperator() {
-        Operator operator = stream.getCurrentOperator();
-        return operator != null && stream.getLastOperatorRating(operator.getId()) == 0;
+            if (chatMenuDialog != null) {
+                chatMenuDialog.enableItem(R.id.relLay_rate_operator, stream.getCurrentOperator() != null);
+            }
+        });
+        stream.addRateOperatorListener(this::showRatingDialog);
     }
 
     public MessageStream getStream() {
@@ -442,6 +452,8 @@ public class ChatEditBar extends LinearLayout implements ActivityResultCallback<
 
             @Override
             public void afterTextChanged(Editable editable) {
+                if (stream == null) return;
+
                 String draft = editable.toString().trim();
                 if (draft.isEmpty()) {
                     editButton.setAlpha(0.5f);

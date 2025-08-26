@@ -1,4 +1,5 @@
 include(":sdk")
 include(":demo")
 include(":chatview")
-project(":sdk").name = "roxclientsdkandroid"
+include(":jetpack_demo")
+project(":sdk").name = "roxchatsdkandroid"

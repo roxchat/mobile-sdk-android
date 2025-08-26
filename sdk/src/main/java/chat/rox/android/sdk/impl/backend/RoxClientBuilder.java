@@ -1,33 +1,39 @@
 package chat.rox.android.sdk.impl.backend;
 
 import android.os.Build;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.gson.FieldNamingPolicy;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import chat.rox.android.sdk.BuildConfig;
-import chat.rox.android.sdk.ProvidedAuthorizationTokenStateListener;
-import chat.rox.android.sdk.Rox;
-import chat.rox.android.sdk.RoxSession;
-import chat.rox.android.sdk.impl.backend.callbacks.DeltaCallback;
-import chat.rox.android.sdk.impl.items.delta.DeltaFullUpdate;
-import chat.rox.android.sdk.impl.items.delta.DeltaItem;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.X509TrustManager;
 
+import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
+import chat.rox.android.sdk.BuildConfig;
+import chat.rox.android.sdk.NotFatalErrorHandler;
+import chat.rox.android.sdk.ProvidedAuthorizationTokenStateListener;
+import chat.rox.android.sdk.Rox;
+import chat.rox.android.sdk.RoxSession;
+import chat.rox.android.sdk.impl.backend.callbacks.DeltaCallback;
+import chat.rox.android.sdk.impl.items.delta.DeltaFullUpdate;
+import chat.rox.android.sdk.impl.items.delta.DeltaItem;
 
 public class RoxClientBuilder {
 
@@ -61,10 +67,11 @@ public class RoxClientBuilder {
     private SSLSocketFactory sslSocketFactory;
     private X509TrustManager trustManager;
     private RoxSession.SessionCallback sessionCallback;
-
+    private ServerConfigsCallback serverConfigsCallback;
+    private Map<String, String> requestHeader;
+    private List<String> extraDomains;
 
     public RoxClientBuilder() {
-
     }
 
     public RoxClientBuilder setBaseUrl(@NonNull String baseUrl) {
@@ -87,8 +94,9 @@ public class RoxClientBuilder {
         return this;
     }
 
-    public RoxClientBuilder setPushToken(@NonNull Rox.PushSystem pushSystem,
-                                           @Nullable String pushToken) {
+    public RoxClientBuilder setPushToken(
+            @NonNull Rox.PushSystem pushSystem,
+            @Nullable String pushToken) {
         this.pushSystem = pushSystem;
         this.pushToken = pushToken;
         return this;
@@ -99,9 +107,14 @@ public class RoxClientBuilder {
         return this;
     }
 
+    public RoxClientBuilder setExtraDomains(List<String> extraDomains) {
+        this.extraDomains = extraDomains;
+        return this;
+    }
+
     public RoxClientBuilder setProvidedAuthorizationListener(
-            @Nullable ProvidedAuthorizationTokenStateListener
-                    providedAuthorizationTokenStateListener) {
+            @Nullable ProvidedAuthorizationTokenStateListener providedAuthorizationTokenStateListener
+    ) {
         this.providedAuthorizationTokenStateListener = providedAuthorizationTokenStateListener;
         return this;
     }
@@ -162,31 +175,37 @@ public class RoxClientBuilder {
         return this;
     }
 
-    private static RoxService setupRoxService(String url,
-                                                  boolean isDelta,
-                                                  SSLSocketFactory sslSocketFactory,
-                                                  X509TrustManager trustManager) {
+    public RoxClientBuilder setRequestHeader(Map<String, String> requestHeader) {
+        this.requestHeader = requestHeader;
+        return this;
+    }
+
+    private static RoxService setupRoxService(
+        String url,
+        boolean isDelta,
+        SSLSocketFactory sslSocketFactory,
+        X509TrustManager trustManager,
+        ClientInterceptor clientInterceptor,
+        HostSelectionInterceptor hostSelectionInterceptor
+    ) {
         return new Retrofit.Builder()
                 .baseUrl(url)
-                .client(setupHttpClient(isDelta, sslSocketFactory, trustManager))
+                .client(setupHttpClient(isDelta, sslSocketFactory, trustManager, clientInterceptor, hostSelectionInterceptor))
                 .addConverterFactory(GsonConverterFactory.create(setupGson()))
                 .build()
                 .create(RoxService.class);
     }
 
-    private static OkHttpClient setupHttpClient(final boolean isDelta,
-                                                final SSLSocketFactory sslSocketFactory,
-                                                final X509TrustManager trustManager) {
+    private static OkHttpClient setupHttpClient(
+        final boolean isDelta,
+        final SSLSocketFactory sslSocketFactory,
+        final X509TrustManager trustManager,
+        final ClientInterceptor clientInterceptor,
+        final HostSelectionInterceptor hostSelectionInterceptor
+    ) {
         OkHttpClient.Builder builder = new OkHttpClient.Builder();
-        builder.addInterceptor(new Interceptor() {
-            @Override
-            public Response intercept(Interceptor.Chain chain) throws IOException {
-                Request request = chain.request().newBuilder()
-                        .header("User-Agent", USER_AGENT_STRING)
-                        .build();
-                return chain.proceed(request);
-            }
-        });
+        builder.addInterceptor(clientInterceptor);
+        builder.addInterceptor(hostSelectionInterceptor);
         builder.readTimeout(isDelta
                         ? DELTA_TIMEOUT_READ_IN_SECONDS
                         : ACTION_TIMEOUT_READ_IN_SECONDS,
@@ -197,14 +216,11 @@ public class RoxClientBuilder {
             builder.sslSocketFactory(sslSocketFactory, trustManager);
         }
         if (RoxInternalLog.getInstance() != null) {
-            builder.addInterceptor(new RoxHttpLoggingInterceptor(new RoxHttpLoggingInterceptor.Logger() {
-                @Override
-                public void log(String message) {
-                    if (isDelta) {
-                        RoxInternalLog.getInstance().setLastDeltaResponseJSON(message);
-                    } else {
-                        RoxInternalLog.getInstance().setLastActionResponseJSON(message);
-                    }
+            builder.addInterceptor(new RoxHttpLoggingInterceptor(message -> {
+                if (isDelta) {
+                    RoxInternalLog.getInstance().setLastDeltaResponseJSON(message);
+                } else {
+                    RoxInternalLog.getInstance().setLastActionResponseJSON(message);
                 }
             }));
         }
@@ -224,6 +240,11 @@ public class RoxClientBuilder {
         return this;
     }
 
+    public RoxClientBuilder setServerConfigsCallback(ServerConfigsCallback serverConfigsCallback) {
+        this.serverConfigsCallback = serverConfigsCallback;
+        return this;
+    }
+
     public RoxClient build() {
         if ((baseUrl == null)
                 || (location == null)
@@ -238,50 +259,78 @@ public class RoxClientBuilder {
             throw new IllegalStateException("callbackExecutor must be set to non-null value.");
         }
 
-        RoxService deltaService = setupRoxService(baseUrl, true,
-                sslSocketFactory, trustManager);
-        RoxService actionsService = setupRoxService(baseUrl, false,
-                sslSocketFactory, trustManager);
+        HostSelectionInterceptor hostSelectionInterceptor = new HostSelectionInterceptor(extraDomains);
+        ClientInterceptor clientInterceptor = new ClientInterceptor(requestHeader);
+        RoxService deltaService = setupRoxService(baseUrl, true, sslSocketFactory, trustManager, clientInterceptor, hostSelectionInterceptor);
+        RoxService actionsService = setupRoxService(baseUrl, false, sslSocketFactory, trustManager, clientInterceptor, hostSelectionInterceptor);
 
         ActionRequestLoop requestLoop = new ActionRequestLoop(callbackExecutor, errorListener);
         requestLoop.setAuthData(authData);
 
-        ActionRequestLoop pollerLoop = new ActionRequestLoop(callbackExecutor, errorListener);
+        ActionRequestLoop pollerLoop = new ActionRequestLoop(callbackExecutor, new IgnoreFatalErrorListener(errorListener));
         pollerLoop.setAuthData(authData);
 
         DeltaRequestLoop delta = new DeltaRequestLoop(
-                deltaCallback,
-                new SessionParamsListenerWrapper(sessionParamsListener, requestLoop, pollerLoop),
-                callbackExecutor,
-                errorListener,
-                deltaService,
-                platform,
-                title,
-                location,
-                appVersion,
-                visitorFieldsJson,
-                providedAuthorizationTokenStateListener,
-                providedAuthorizationToken,
-                deviceId,
-                prechatFields,
-                pushSystem,
-                pushToken,
-                visitorJson,
-                sessionId,
-                authData,
-                sessionCallback
+            deltaCallback,
+            new SessionParamsListenerWrapper(sessionParamsListener, requestLoop, pollerLoop),
+            callbackExecutor,
+            errorListener,
+            deltaService,
+            platform,
+            title,
+            location,
+            appVersion,
+            visitorFieldsJson,
+            providedAuthorizationTokenStateListener,
+            providedAuthorizationToken,
+            deviceId,
+            prechatFields,
+            pushSystem,
+            pushToken,
+            visitorJson,
+            sessionId,
+            authData,
+            sessionCallback,
+            serverConfigsCallback
         );
 
-        return new RoxClientImpl(requestLoop, delta, pollerLoop,
-                new RoxActionsImpl(actionsService, requestLoop, pollerLoop));
+        return new RoxClientImpl(
+            requestLoop,
+            delta,
+            pollerLoop,
+            new RoxActionsImpl(actionsService, requestLoop, pollerLoop),
+            clientInterceptor,
+            hostSelectionInterceptor
+        );
     }
 
     private static Gson setupGson() {
         return new GsonBuilder()
-                .registerTypeAdapter(DeltaItem.class, new DeltaDeserializer())
-                .registerTypeAdapter(DeltaFullUpdate.class, new DeltaFullUpdateDeserializer())
-                .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
-                .create();
+            .registerTypeAdapter(DeltaItem.class, new DeltaDeserializer())
+            .registerTypeAdapter(DeltaFullUpdate.class, new DeltaFullUpdateDeserializer())
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .create();
+    }
+
+    private static class IgnoreFatalErrorListener implements InternalErrorListener {
+        private final InternalErrorListener errorListener;
+
+        public IgnoreFatalErrorListener(InternalErrorListener errorListener) {
+            this.errorListener = errorListener;
+        }
+
+        @Override
+        public void onError(@NonNull String url, @Nullable String error, int httpCode){
+            RoxInternalLog.getInstance().log(
+                "Fatal error ignored: url=" + url + " error=" + error + " httpCode=" + httpCode,
+                Rox.SessionBuilder.RoxLogVerbosityLevel.ERROR
+            );
+        }
+
+        @Override
+        public void onNotFatalError (@NonNull NotFatalErrorHandler.NotFatalErrorType error){
+            errorListener.onNotFatalError(error);
+        }
     }
 
     /**
@@ -296,15 +345,25 @@ public class RoxClientBuilder {
         private final ActionRequestLoop requestLoop;
         @NonNull
         private final ActionRequestLoop pollerLoop;
+        @NonNull
+        private final ClientInterceptor clientInterceptor;
+        @NonNull
+        private final HostSelectionInterceptor hostSelectionInterceptor;
 
-        private RoxClientImpl(@NonNull ActionRequestLoop requestLoop,
-                                @NonNull DeltaRequestLoop deltaLoop,
-                                @NonNull ActionRequestLoop pollerLoop,
-                                @NonNull RoxActionsImpl actions) {
+        private RoxClientImpl(
+            @NonNull ActionRequestLoop requestLoop,
+            @NonNull DeltaRequestLoop deltaLoop,
+            @NonNull ActionRequestLoop pollerLoop,
+            @NonNull RoxActionsImpl actions,
+            @NonNull ClientInterceptor clientInterceptor,
+            @NonNull HostSelectionInterceptor hostSelectionInterceptor
+        ) {
             this.requestLoop = requestLoop;
             this.deltaLoop = deltaLoop;
             this.pollerLoop = pollerLoop;
             this.actions = actions;
+            this.clientInterceptor = clientInterceptor;
+            this.hostSelectionInterceptor = hostSelectionInterceptor;
         }
 
         @Override
@@ -358,6 +417,75 @@ public class RoxClientBuilder {
         public void setPushToken(@NonNull String token, @Nullable RoxSession.TokenCallback callback) {
             deltaLoop.setPushToken(token);
             actions.updatePushToken(token, callback);
+        }
+
+        @Override
+        public void setRequestHeaders(@NonNull Map<String, String> headers) {
+            clientInterceptor.setRequestHeader(headers);
+        }
+
+        @Override
+        public void switchHost() {
+            hostSelectionInterceptor.switchDomain();
+        }
+    }
+
+    private static class ClientInterceptor implements Interceptor {
+        private volatile Map<String, String> requestHeader;
+
+        private ClientInterceptor(Map<String, String> requestHeader) {
+            this.requestHeader = requestHeader;
+        }
+
+        public void setRequestHeader(Map<String, String> requestHeader) {
+            this.requestHeader = requestHeader;
+        }
+
+        @NonNull
+        @Override
+        public Response intercept(@NonNull Chain chain) throws IOException {
+            Request.Builder requestBuilder = chain.request().newBuilder()
+                .header("User-Agent", USER_AGENT_STRING);
+            if (requestHeader != null) {
+                for (Map.Entry<String, String> entry : requestHeader.entrySet()) {
+                    requestBuilder.header(entry.getKey(), entry.getValue());
+                }
+            }
+            return chain.proceed(requestBuilder.build());
+        }
+    }
+
+    private static class HostSelectionInterceptor implements Interceptor {
+        private static final int DEFAULT_DOMAIN_RETRY = -1;
+        private final @NonNull List<String> extraDomains;
+        private final AtomicInteger retry = new AtomicInteger(DEFAULT_DOMAIN_RETRY);
+
+        public HostSelectionInterceptor(@NonNull List<String> extraDomains) {
+            this.extraDomains = extraDomains;
+        }
+
+        public void switchDomain() {
+            retry.incrementAndGet();
+        }
+
+        @NonNull
+        @Override
+        public Response intercept(@NonNull Chain chain) throws IOException {
+            Request request = chain.request();
+
+            int localRetry = retry.get();
+            if (localRetry == DEFAULT_DOMAIN_RETRY || localRetry >= extraDomains.size()) {
+                return chain.proceed(request);
+            }
+
+            String newDomain = extraDomains.get(localRetry);
+            HttpUrl newUrl = request.url().newBuilder()
+                .host(newDomain)
+                .build();
+
+            request = request.newBuilder().url(newUrl).build();
+            return chain.proceed(request);
+
         }
     }
 

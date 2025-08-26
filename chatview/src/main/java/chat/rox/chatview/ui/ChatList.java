@@ -19,6 +19,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -48,6 +49,7 @@ public class ChatList extends FrameLayout {
     private ProgressBar progressBar;
     private MessageStream stream;
     private ListControllerReadyCallback readyCallback;
+    private boolean isAutoScrollToLastMsgEnabled = true;
 
     private final BroadcastReceiver fileDownloadedComplete = new BroadcastReceiver() {
         public void onReceive(Context ctxt, Intent intent) {
@@ -78,11 +80,13 @@ public class ChatList extends FrameLayout {
         setBackgroundColor(ViewUtils.resolveAttr(R.attr.chv_secondary_color, context));
 
         chatPrompt = rootView.findViewById(R.id.chv_notification_bar);
-        syncedWithServerCallbacks.add(chatPrompt);
         recyclerView = rootView.findViewById(R.id.chv_chat_view);
         chatEmptyText = rootView.findViewById(R.id.chv_empty_chat);
         scrollButton = rootView.findViewById(R.id.chv_scroll_button);
         progressBar = rootView.findViewById(R.id.chat_progress_bar);
+
+        syncedWithServerCallbacks.add(chatPrompt);
+        syncedWithServerCallbacks.add(() -> stream.setChatRead());
    }
 
     public ListController getListController() {
@@ -113,13 +117,22 @@ public class ChatList extends FrameLayout {
         return (ChatAdapter<?>) recyclerView.getAdapter();
     }
 
+    public void setAutoScrollToLastMsgEnabled(boolean isEnabled) {
+        isAutoScrollToLastMsgEnabled = isEnabled;
+    }
+
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
 
         if (isInEditMode()) return;
 
-        getContext().registerReceiver(fileDownloadedComplete, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+        ContextCompat.registerReceiver(
+            getContext(),
+            fileDownloadedComplete,
+            new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            ContextCompat.RECEIVER_EXPORTED
+        );
 
         listController = new ListController();
         if (readyCallback != null) {
@@ -190,6 +203,7 @@ public class ChatList extends FrameLayout {
         private final EndlessScrollListener scrollListener;
         private final ChatEmptyListener messagesCountListener;
         private boolean requestingMessages;
+        private boolean chatWasRead = false;
 
         private ListController() {
             messagesCountListener = empty -> chatEmptyText.setVisibility(empty ? VISIBLE : GONE);;
@@ -226,6 +240,14 @@ public class ChatList extends FrameLayout {
                         scrollButton.setVisibility(View.GONE);
                     }
                 }
+
+                @Override
+                public void onChatWasScrolledToEnd() {
+                    if (!chatWasRead) {
+                        chatWasRead = true;
+                        stream.setChatRead();
+                    }
+                }
             };
             scrollListener.setLoading(true);
             scrollListener.setDownButton(scrollButton);
@@ -246,6 +268,7 @@ public class ChatList extends FrameLayout {
             requestingMessages = true;
 
             tracker.getNextMessages(MESSAGES_PER_REQUEST, received -> {
+                chatWasRead = false;
                 requestingMessages = false;
                 progressBar.setVisibility(View.GONE);
 
@@ -277,13 +300,14 @@ public class ChatList extends FrameLayout {
         public void messageAdded(@Nullable Message before, @NonNull Message message) {
             checkChatNotEmptyCallback(true);
 
-            int ind = (before == null) ? 0 : adapter.indexOf(before);
-            if (ind <= 0) {
+            chatWasRead = false;
+            int ind = (before == null) ? -1 : adapter.indexOf(before);
+            if (ind < 0) {
                 boolean fromVisitor = message.getType() == VISITOR || message.getType() == FILE_FROM_VISITOR;
                 adapter.add(message);
                 adapter.notifyItemInserted(0);
 
-                if (fromVisitor || isLastVisible()) {
+                if ((fromVisitor || isLastVisible()) && isAutoScrollToLastMsgEnabled) {
                     recyclerView.stopScroll();
                     recyclerView.smoothScrollToPosition(0);
                 } else {

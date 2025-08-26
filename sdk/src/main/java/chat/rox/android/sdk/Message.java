@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import java.util.List;
 
 import chat.rox.android.sdk.impl.MessageReaction;
+import chat.rox.android.sdk.impl.items.MessageGroup;
 
 /**
  * Abstracts a single message in the message history. A message is an immutable object. It means that for changing
@@ -128,6 +129,12 @@ public interface Message {
     boolean canVisitorChangeReaction();
 
     /**
+     * @return groupId of the message of null if groupId not exists
+     */
+    @Nullable
+    MessageGroup.GroupData getGroupData();
+
+    /**
      * Abstracts unique id of the message. The class was designed only to be compared by {@code equals}.
      * @see Message#getClientSideId()
      */
@@ -204,7 +211,11 @@ public interface Message {
         /**
          * A message had been sent to the server, received by the server and was spreaded among clients.
          */
-        SENT
+        SENT,
+        /**
+         * A message hadn't been sent successfully.
+         */
+        FAILED
     }
 
     /**
@@ -234,6 +245,11 @@ public interface Message {
         @Nullable String getErrorMessage();
 
         /**
+         * @return a message with the reason for the visitor error during loading
+         */
+        @Nullable String getVisitorErrorMessage();
+
+        /**
          * @return attachment upload progress as a percentage
          */
         int getDownloadProgress();
@@ -243,6 +259,12 @@ public interface Message {
          */
         @NonNull
         AttachmentState getState();
+
+        /**
+         * @return extra text (caption) for file
+         */
+        @Nullable
+        String getExtraText();
 
         /**
          * Shows the state of the attachment.
@@ -302,6 +324,11 @@ public interface Message {
          * @return if a file is an image, returns information about an image, in other cases returns null
          */
         @Nullable ImageInfo getImageInfo();
+
+        /**
+         * @return local file path
+         */
+        @Nullable String getLocalPath();
     }
 
     /**
@@ -387,7 +414,7 @@ public interface Message {
         /**
          * @return author id of the message that was quoted.
          */
-        @Nullable String getAuthorId();
+        @Nullable String getQuotedMessageId();
 
         /**
          * Shows the state of the quoted message.

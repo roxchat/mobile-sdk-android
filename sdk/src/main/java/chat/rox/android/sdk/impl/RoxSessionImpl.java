@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executor;
@@ -34,25 +35,31 @@ import chat.rox.android.sdk.FatalErrorHandler;
 import chat.rox.android.sdk.FatalErrorHandler.FatalErrorType;
 import chat.rox.android.sdk.Message;
 import chat.rox.android.sdk.MessageStream;
+import chat.rox.android.sdk.MessageTracker;
 import chat.rox.android.sdk.NotFatalErrorHandler;
 import chat.rox.android.sdk.ProvidedAuthorizationTokenStateListener;
+import chat.rox.android.sdk.Supplier;
 import chat.rox.android.sdk.Rox;
 import chat.rox.android.sdk.RoxError;
+import chat.rox.android.sdk.RoxLogEntity;
 import chat.rox.android.sdk.RoxSession;
 import chat.rox.android.sdk.impl.backend.AuthData;
-import chat.rox.android.sdk.impl.backend.callbacks.DefaultCallback;
-import chat.rox.android.sdk.impl.backend.callbacks.DeltaCallback;
 import chat.rox.android.sdk.impl.backend.DeltaRequestLoop;
 import chat.rox.android.sdk.impl.backend.InternalErrorListener;
+import chat.rox.android.sdk.impl.backend.ServerConfigsCallback;
 import chat.rox.android.sdk.impl.backend.SessionParamsListener;
 import chat.rox.android.sdk.impl.backend.RoxActions;
 import chat.rox.android.sdk.impl.backend.RoxClient;
 import chat.rox.android.sdk.impl.backend.RoxClientBuilder;
 import chat.rox.android.sdk.impl.backend.RoxInternalError;
 import chat.rox.android.sdk.impl.backend.RoxInternalLog;
+import chat.rox.android.sdk.impl.backend.callbacks.DefaultCallback;
+import chat.rox.android.sdk.impl.backend.callbacks.DeltaCallback;
+import chat.rox.android.sdk.impl.items.AccountConfigItem;
 import chat.rox.android.sdk.impl.items.ChatItem;
 import chat.rox.android.sdk.impl.items.DepartmentItem;
 import chat.rox.android.sdk.impl.items.HistoryRevisionItem;
+import chat.rox.android.sdk.impl.items.LocationSettingsItem;
 import chat.rox.android.sdk.impl.items.MessageItem;
 import chat.rox.android.sdk.impl.items.OnlineStatusItem;
 import chat.rox.android.sdk.impl.items.OperatorItem;
@@ -81,6 +88,8 @@ public class RoxSessionImpl implements RoxSession {
     private static final String PREFS_KEY_SESSION_ID = "session_id";
     private static final String PREFS_KEY_VISITOR = "visitor";
     private static final String PREFS_KEY_VISITOR_EXT = "visitor_ext";
+    private static final String PREFS_KEY_ACCOUNT_CONFIG = "account_config";
+    private static final String PREFS_KEY_LOCATION_CONFIG = "location_config";
     private static final String PREFS_KEY_NON_ENCRYPTED_PREFERENCES_REMOVED = "non_safety_preferences_removed";
     private static final String SHARED_PREFS_NAME = BuildConfig.LIBRARY_PACKAGE_NAME + ".visitor.";
     private static final String SHARED_PREFS_NAME_DEPRECATED = "com.roxapp.android.sdk.visitor.";
@@ -97,6 +106,8 @@ public class RoxSessionImpl implements RoxSession {
     private final LocationStatusPoller locationStatusPoller;
     @NonNull
     private final MessageStreamImpl stream;
+    @NonNull
+    private final SendingMessagesResender sendingMessagesResender;
     private boolean clientStarted;
 
     private RoxSessionImpl(
@@ -105,13 +116,15 @@ public class RoxSessionImpl implements RoxSession {
         @NonNull RoxClient client,
         @NonNull HistoryPoller historyPoller,
         @NonNull MessageStreamImpl stream,
-        @Nullable LocationStatusPoller locationStatusPoller) {
+        @Nullable LocationStatusPoller locationStatusPoller,
+        @NonNull SendingMessagesResender sendingMessagesResender) {
         this.accessChecker = accessChecker;
         this.destroyer = destroyer;
         this.client = client;
         this.historyPoller = historyPoller;
         this.stream = stream;
         this.locationStatusPoller = locationStatusPoller;
+        this.sendingMessagesResender = sendingMessagesResender;
     }
 
     private void checkAccess() {
@@ -140,6 +153,7 @@ public class RoxSessionImpl implements RoxSession {
         checkAccess();
         client.pause();
         historyPoller.pause();
+        sendingMessagesResender.cancelTask();
         if (locationStatusPoller != null) {
             locationStatusPoller.pause();
         }
@@ -198,6 +212,11 @@ public class RoxSessionImpl implements RoxSession {
         client.setPushToken(emptyPushToken, tokenCallback);
     }
 
+    @Override
+    public void setRequestHeaders(@NonNull Map<String, String> headers) {
+        client.setRequestHeaders(headers);
+    }
+
     @NonNull
     public static RoxSessionImpl newInstance(
             @NonNull Context context,
@@ -222,7 +241,9 @@ public class RoxSessionImpl implements RoxSession {
             @NonNull String multivisitorSection,
             @Nullable SessionCallback sessionCallback,
             long requestLocationFrequency,
-            @Nullable MessageParsingErrorHandler messageParsingErrorHandler
+            @Nullable MessageParsingErrorHandler messageParsingErrorHandler,
+            @Nullable Map<String, String> requestHeader,
+            @NonNull List<String> extraDomains
     ) {
         context.getClass(); // NPE
         accountName.getClass(); // NPE
@@ -265,16 +286,22 @@ public class RoxSessionImpl implements RoxSession {
         DeltaCallbackImpl deltaCallback = new DeltaCallbackImpl(
             currentChatMessageMapper,
             historyMessageMapper,
-            preferences);
+            preferences
+        );
+
+        ServerConfigsCallbackImpl serverConfigsCallback = new ServerConfigsCallbackImpl();
+
+        DestroyIfNotErrorListener errorListener = new DestroyIfNotErrorListener(sessionDestroyer, new ErrorHandlerToInternalAdapter(errorHandler), notFatalErrorHandler);
 
         final RoxClient client = new RoxClientBuilder()
             .setBaseUrl(serverUrl)
             .setLocation(location).setAppVersion(appVersion)
             .setVisitorFieldsJson((visitorFields == null) ? null : visitorFields.getJson())
             .setDeltaCallback(deltaCallback)
+            .setServerConfigsCallback(serverConfigsCallback)
+            .setExtraDomains(extraDomains)
             .setSessionParamsListener(new SessionParamsListenerImpl(preferences))
-            .setErrorListener(new DestroyIfNotErrorListener(sessionDestroyer,
-                    new ErrorHandlerToInternalAdapter(errorHandler), notFatalErrorHandler))
+            .setErrorListener(errorListener)
             .setVisitorJson(preferences.getString(PREFS_KEY_VISITOR, null))
             .setProvidedAuthorizationListener(providedAuthorizationTokenStateListener)
             .setProvidedAuthorizationToken(providedAuthorizationToken)
@@ -284,13 +311,15 @@ public class RoxSessionImpl implements RoxSession {
                     handler))
             .setPlatform(PLATFORM)
             .setTitle((title != null) ? title : TITLE)
-            .setPushToken(pushSystem,
-                    pushSystem != Rox.PushSystem.NONE ? pushToken : null)
+            .setPushToken(pushSystem, pushSystem != Rox.PushSystem.NONE ? pushToken : null)
             .setDeviceId(getDeviceId(context, multivisitorSection))
             .setPrechatFields(prechatFields)
+            .setRequestHeader(requestHeader)
             .setSslSocketFactoryAndTrustManager(sslSocketFactory, trustManager)
             .setSessionCallback(sessionCallback)
             .build();
+
+        errorListener.setHostSwitchRunnable(client::switchHost);
 
         FileUrlCreator fileUrlCreator = new FileUrlCreator(client, serverUrl);
 
@@ -304,23 +333,29 @@ public class RoxSessionImpl implements RoxSession {
         if (storeHistoryLocally) {
             String dbName = preferences.getString(PREFS_KEY_HISTORY_DB_NAME, null);
             String dbPassword = preferences.getString(PREFS_KEY_HISTORY_DB_PASSWORD, null);
+            if (dbName != null && !dbName.contains("v2")) {
+                // remove old database version
+                context.deleteDatabase(dbName);
+                dbName = dbPassword = null;
+            }
             if (dbName == null || dbPassword == null) {
                 preferences.edit()
-                    .putString(PREFS_KEY_HISTORY_DB_NAME, dbName = "rox_" + StringId.generateClientSide() + ".db")
+                    .putString(PREFS_KEY_HISTORY_DB_NAME, dbName = "rox_v2_" + StringId.generateClientSide() + ".db")
                     .putString(PREFS_KEY_HISTORY_DB_PASSWORD, dbPassword = UUID.randomUUID().toString())
                     .apply();
             }
             historyMeta = new PreferencesHistoryMetaInfStorage(preferences);
-            historyStorage = new SQLiteHistoryStorage(context,
-                    handler,
-                    dbName,
-                    serverUrl,
-                    historyMeta.isHistoryEnded(),
-                    fileUrlCreator,
-                    preferences.getLong(PREFS_KEY_READ_BEFORE_TIMESTAMP, -1),
-                    dbPassword);
-            if (preferences.getInt(PREFS_KEY_HISTORY_MAJOR_VERSION, -1)
-                    != historyStorage.getMajorVersion()) {
+            historyStorage = new SQLiteHistoryStorage(
+                context,
+                handler,
+                dbName,
+                serverUrl,
+                historyMeta.isHistoryEnded(),
+                fileUrlCreator,
+                preferences.getLong(PREFS_KEY_READ_BEFORE_TIMESTAMP, -1),
+                dbPassword
+            );
+            if (preferences.getInt(PREFS_KEY_HISTORY_MAJOR_VERSION, -1) != historyStorage.getMajorVersion()) {
                 preferences.edit()
                     .remove(PREFS_KEY_HISTORY_REVISION)
                     .remove(PREFS_KEY_HISTORY_ENDED)
@@ -340,6 +375,9 @@ public class RoxSessionImpl implements RoxSession {
                 historyMeta.isHistoryEnded()
         );
 
+        AccountConfigItem cachedAccountConfigItem = resolveCachedConfigItem(preferences, PREFS_KEY_ACCOUNT_CONFIG, AccountConfigItem.class);
+        LocationSettingsItem cachedLocationConfigItem = resolveCachedConfigItem(preferences, PREFS_KEY_LOCATION_CONFIG, LocationSettingsItem.class);
+
         MessageStreamImpl stream = new MessageStreamImpl(
                 serverUrl,
                 currentChatMessageMapper,
@@ -351,7 +389,9 @@ public class RoxSessionImpl implements RoxSession {
                 messageHolder,
                 new MessageComposingHandlerImpl(handler, actions),
                 new LocationSettingsHolder(preferences),
-                location
+                location,
+                cachedAccountConfigItem,
+                cachedLocationConfigItem
         );
 
         final HistoryPoller hPoller = new HistoryPoller(sessionDestroyer,
@@ -378,13 +418,10 @@ public class RoxSessionImpl implements RoxSession {
         if (requestLocationFrequency > 0) {
             locationStatusPoller = new LocationStatusPoller(actions, handler, stream, location, requestLocationFrequency);
             LocationStatusPoller finalLocationPoller = locationStatusPoller;
-            sessionDestroyer.addDestroyAction(new Runnable() {
-                @Override
-                public void run() {
-                    finalLocationPoller.pause();
-                }
-            });
+            sessionDestroyer.addDestroyAction(finalLocationPoller::pause);
         }
+
+        SendingMessagesResender sendingMessagesResender = new SendingMessagesResender(historyStorage, stream);
 
         RoxSessionImpl session = new RoxSessionImpl(
             accessChecker,
@@ -392,15 +429,40 @@ public class RoxSessionImpl implements RoxSession {
             client,
             hPoller,
             stream,
-            locationStatusPoller
+            locationStatusPoller,
+            sendingMessagesResender
         );
 
-        deltaCallback.setStream(stream, messageHolder, session, hPoller);
+        deltaCallback.setStream(stream, messageHolder, session, hPoller, sendingMessagesResender);
+        serverConfigsCallback.setStream(stream, preferences);
+
+        Supplier<Boolean> safeUrlProvider = () -> stream.getAccountConfig() != null && stream.getAccountConfig().isCheckVisitorAuth();
+        fileUrlCreator.setSafeUrlProvider(safeUrlProvider);
 
         RoxInternalLog.getInstance().log("Specified Rox server – " + serverUrl,
                 Rox.SessionBuilder.RoxLogVerbosityLevel.DEBUG);
 
         return session;
+    }
+
+    private static <T> T resolveCachedConfigItem(SharedPreferences preferences, String prefKey, Class<T> clazz) {
+        String rawAccountConfig = preferences.getString(prefKey, null);
+        if (rawAccountConfig == null || rawAccountConfig.isEmpty()) {
+            return null;
+        }
+
+        try {
+            return InternalUtils.fromJson(rawAccountConfig, clazz);
+        } catch (Throwable throwable) {
+            preferences.edit().remove(prefKey).apply();
+
+            RoxInternalLog.getInstance().log(
+                "Can't read cached " + prefKey + " " + throwable.getMessage(),
+                Rox.SessionBuilder.RoxLogVerbosityLevel.ERROR,
+                RoxLogEntity.DATABASE
+            );
+            return null;
+        }
     }
 
     private static SharedPreferences getSharedPreferences(@NonNull Context context, @Nullable ProvidedVisitorFields visitorFields, @Nullable FatalErrorHandler errorHandler) {
@@ -489,8 +551,10 @@ public class RoxSessionImpl implements RoxSession {
         return guid;
     }
 
-    private static void clearVisitorData(@NonNull Context context,
-                                         @NonNull SharedPreferences preferences) {
+    private static void clearVisitorData(
+        @NonNull Context context,
+        @NonNull SharedPreferences preferences
+    ) {
         String dbName = preferences.getString(PREFS_KEY_HISTORY_DB_NAME, null);
         if (dbName != null) {
             context.deleteDatabase(dbName);
@@ -498,9 +562,11 @@ public class RoxSessionImpl implements RoxSession {
         preferences.edit().clear().apply();
     }
 
-    private static void checkSavedSession(@NonNull Context context,
-                                          @NonNull SharedPreferences preferences,
-                                          @Nullable ProvidedVisitorFields newVisitorFields) {
+    private static void checkSavedSession(
+        @NonNull Context context,
+        @NonNull SharedPreferences preferences,
+        @Nullable ProvidedVisitorFields newVisitorFields
+    ) {
         String newVisitorFieldsJson = newVisitorFields == null ? null : newVisitorFields.getJson();
         String oldVisitorFieldsJson = preferences.getString(PREFS_KEY_VISITOR_EXT, null);
         if (oldVisitorFieldsJson != null) {
@@ -829,7 +895,7 @@ public class RoxSessionImpl implements RoxSession {
 
         private void requestHistorySince(@Nullable String since,
                                          final HistorySinceCallback callback) {
-            actions.requestHistorySince(since, wrapHistorySinceCallback(since, callback));
+            actions.requestHistorySinceForPoller(since, wrapHistorySinceCallback(since, callback));
         }
 
         private DefaultCallback<HistorySinceResponse> wrapHistorySinceCallback(
@@ -848,7 +914,7 @@ public class RoxSessionImpl implements RoxSession {
                         Set<String> deletes = new HashSet<>();
                         for (MessageItem msg : list) {
                             if (msg.isDeleted()) {
-                                deletes.add(msg.getId());
+                                deletes.add(msg.getClientSideId());
                             } else {
                                 changes.add(msg);
                             }
@@ -860,6 +926,42 @@ public class RoxSessionImpl implements RoxSession {
                                 since == null,
                                 data.getRevision());
                     }
+                }
+            };
+        }
+    }
+
+    private static class SendingMessagesResender {
+        private final HistoryStorage historyStorage;
+        private MessageStream messageStream;
+        private volatile boolean isLoading;
+
+        private MessageTracker.GetMessagesCallback callback;
+
+        private SendingMessagesResender(HistoryStorage historyStorage, MessageStream messageStream) {
+            this.historyStorage = historyStorage;
+            this.messageStream = messageStream;
+        }
+
+        public void checkMessagesForResend() {
+            isLoading = true;
+            createCallback();
+            historyStorage.getSending(callback);
+        }
+
+        public void cancelTask() {
+            isLoading = false;
+            callback = null;
+        }
+
+        private void createCallback() {
+            callback = messages -> {
+                if (!isLoading) {
+                    return;
+                }
+
+                for (Message message : messages) {
+                    messageStream.resendMessage(message, null);
                 }
             };
         }
@@ -923,6 +1025,43 @@ public class RoxSessionImpl implements RoxSession {
                     handler.postDelayed(callback, requestLocationFrequency);
                 }
             });
+        }
+    }
+
+    private static class ServerConfigsCallbackImpl implements ServerConfigsCallback {
+        private MessageStreamImpl messageStream;
+        private SharedPreferences preferences;
+
+        public void setStream(MessageStreamImpl messageStream, SharedPreferences preferences) {
+            this.messageStream = messageStream;
+            this.preferences = preferences;
+        }
+
+        @Override
+        public void onServerConfigs(
+            @NonNull AccountConfigItem accountConfigItem,
+            @NonNull LocationSettingsItem locationSettingsItem
+        ) {
+            cacheConfigItem(PREFS_KEY_ACCOUNT_CONFIG, accountConfigItem);
+            cacheConfigItem(PREFS_KEY_LOCATION_CONFIG, locationSettingsItem);
+            messageStream.onServerConfigsUpdated(accountConfigItem, locationSettingsItem);
+        }
+
+        private void cacheConfigItem(String key, Object item) {
+            try {
+                String rawItem = InternalUtils.toJson(item);
+                if (rawItem != null && !rawItem.isEmpty()) {
+                    preferences.edit()
+                        .putString(key, rawItem)
+                        .apply();
+                }
+            } catch (Throwable throwable) {
+                RoxInternalLog.getInstance().log(
+                    "Cannot update item " + key + " " + throwable.getMessage(),
+                    Rox.SessionBuilder.RoxLogVerbosityLevel.ERROR,
+                    RoxLogEntity.DATABASE
+                );
+            }
         }
     }
 
@@ -990,25 +1129,31 @@ public class RoxSessionImpl implements RoxSession {
         private MessageStreamImpl messageStream;
         private MessageHolder messageHolder;
         private RoxSessionImpl session;
+        private SendingMessagesResender messagesResender;
         private boolean firstFullUpdateReceived;
 
         private DeltaCallbackImpl(
-                @NonNull MessageFactories.Mapper<MessageImpl> currentChatMessageMapper,
-                @NonNull MessageFactories.Mapper<MessageImpl> historyChatMessageMapper,
-                @NonNull SharedPreferences preferences) {
+            @NonNull MessageFactories.Mapper<MessageImpl> currentChatMessageMapper,
+            @NonNull MessageFactories.Mapper<MessageImpl> historyChatMessageMapper,
+            @NonNull SharedPreferences preferences
+        ) {
             this.currentChatMessageMapper = currentChatMessageMapper;
             this.historyChatMessageMapper = historyChatMessageMapper;
             this.preferences = preferences;
         }
 
-        public void setStream(MessageStreamImpl stream,
-                              MessageHolder messageHolder,
-                              RoxSessionImpl session,
-                              HistoryPoller historyPoller) {
+        public void setStream(
+            MessageStreamImpl stream,
+            MessageHolder messageHolder,
+            RoxSessionImpl session,
+            HistoryPoller historyPoller,
+            SendingMessagesResender messagesResender
+        ) {
             this.messageStream = stream;
             this.messageHolder = messageHolder;
             this.session = session;
             this.historyPoller = historyPoller;
+            this.messagesResender = messagesResender;
         }
 
         @Override
@@ -1067,6 +1212,7 @@ public class RoxSessionImpl implements RoxSession {
             if (!firstFullUpdateReceived) {
                 firstFullUpdateReceived = true;
                 messageHolder.onFirstFullUpdateReceived();
+                messagesResender.checkMessagesForResend();
             }
         }
 
@@ -1085,6 +1231,10 @@ public class RoxSessionImpl implements RoxSession {
                 switch (deltaType) {
                     case CHAT: {
                         handleChatDelta(deltaItem);
+                        break;
+                    }
+                    case CHAT_ID: {
+                        handleChatIdDelta(deltaItem);
                         break;
                     }
                     case CHAT_MESSAGE: {
@@ -1165,6 +1315,17 @@ public class RoxSessionImpl implements RoxSession {
                         historyPoller.insertMessageInDB(message);
                     }
                 }
+            }
+        }
+
+        private void handleChatIdDelta(DeltaItem<?> deltaItem) {
+            DeltaItem.Event deltaEvent = deltaItem.getEvent();
+
+            if (deltaEvent == DeltaItem.Event.DELETE) {
+                messageStream.onChatIdUpdated(null);
+            } else {
+                String chatId = (String) deltaItem.getData();
+                messageStream.onChatIdUpdated(chatId);
             }
         }
 
@@ -1267,11 +1428,13 @@ public class RoxSessionImpl implements RoxSession {
                 currentChat.setReadByVisitor(isRead);
                 if (isRead) {
                     currentChat.setUnreadByVisitorTimestamp(0);
+                    currentChat.setUnreadByVisitorMessageCount(0);
                 }
             }
 
             if (isRead) {
                 messageStream.setUnreadByVisitorTimestamp(0);
+                messageStream.setUnreadByVisitorMessageCount(0);
             }
         }
 
@@ -1326,7 +1489,11 @@ public class RoxSessionImpl implements RoxSession {
             if (currentChat != null) {
                 String operatorId = rating.getOperatorId();
                 if (operatorId != null) {
-                    currentChat.getOperatorIdToRating().put(rating.getOperatorId(), rating);
+                    if (rating.getAnswer() != null) {
+                        currentChat.getOperatorIdToResolutionSurvey().put(rating.getOperatorId(), rating);
+                    } else {
+                        currentChat.getOperatorIdToRating().put(rating.getOperatorId(), rating);
+                    }
                 }
             }
         }
@@ -1432,13 +1599,21 @@ public class RoxSessionImpl implements RoxSession {
         private final InternalErrorListener errorListener;
         @Nullable
         private final NotFatalErrorHandler notFatalErrorHandler;
+        @NonNull
+        private Runnable hostSwitchRunnable;
 
-        private DestroyIfNotErrorListener(@Nullable SessionDestroyer destroyer,
-                                          @Nullable InternalErrorListener errorListener,
-                                          @Nullable NotFatalErrorHandler notFatalErrorHandler) {
+        private DestroyIfNotErrorListener(
+            @Nullable SessionDestroyer destroyer,
+            @Nullable InternalErrorListener errorListener,
+            @Nullable NotFatalErrorHandler notFatalErrorHandler
+        ) {
             this.destroyer = destroyer;
             this.errorListener = errorListener;
             this.notFatalErrorHandler = notFatalErrorHandler;
+        }
+
+        public void setHostSwitchRunnable(@NonNull Runnable hostSwitchRunnable) {
+            this.hostSwitchRunnable = hostSwitchRunnable;
         }
 
         @Override
@@ -1455,8 +1630,18 @@ public class RoxSessionImpl implements RoxSession {
 
         @Override
         public void onNotFatalError(@NonNull NotFatalErrorHandler.NotFatalErrorType error) {
+            handleNotFatalError(error);
             if (notFatalErrorHandler != null) {
                 notFatalErrorHandler.onNotFatalError(new RoxErrorImpl<>(error, null));
+            }
+        }
+
+        private void handleNotFatalError(NotFatalErrorHandler.NotFatalErrorType error) {
+            switch (error) {
+                case UNKNOWN_HOST: {
+                    hostSwitchRunnable.run();
+                    break;
+                }
             }
         }
     }
@@ -1578,7 +1763,10 @@ public class RoxSessionImpl implements RoxSession {
                         "Created on: " + thread + ", current thread: " + Thread.currentThread());
             }
             if (destroyer.isDestroyed()) {
-                throw new IllegalStateException("Can't use destroyed session");
+                RoxInternalLog.getInstance().log(
+                    "RoxSession is already destroyed",
+                    Rox.SessionBuilder.RoxLogVerbosityLevel.ERROR
+                );
             }
         }
     }

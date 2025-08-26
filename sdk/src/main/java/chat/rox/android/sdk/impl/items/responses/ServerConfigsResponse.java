@@ -5,7 +5,7 @@ import com.google.gson.annotations.SerializedName;
 import chat.rox.android.sdk.impl.items.AccountConfigItem;
 import chat.rox.android.sdk.impl.items.LocationSettingsItem;
 
-public class ServerSettingsResponse extends ErrorResponse {
+public class ServerConfigsResponse extends ErrorResponse {
     @SerializedName("locationSettings")
     private LocationSettingsItem locationSettings;
     @SerializedName("accountConfig")

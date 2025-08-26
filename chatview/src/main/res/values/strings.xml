@@ -37,9 +37,12 @@
     <string name="file_upload_failed_unauthorized">Не удалось отправить файл: посетитель не авторизован</string>
     <string name="file_upload_failed_empty">Не удалось отправить файл: пустой файл</string>
     <string name="file_upload_message_text">Отправка файла…</string>
+    <string name="file_detected_malicious">При передаче файла произошла ошибка</string>
     <string name="file_send">Отправил(а) файл:\n</string>
     <string name="error_user_banned_header">Вы забанены оператором</string>
     <string name="error_user_banned_desc">Вы не можете использовать чат, так как были забанены оператором</string>
+    <string name="error_user_hash_invalid_header">Неверно посчитанный хеш</string>
+    <string name="error_user_hash_invalid_desc">Вы не можете использовать чат, так как были переданы неверные кастомные поля или неправильно был посчитан хеш</string>
     <string name="error_account_blocked_header">Rox-аккаунт заблокирован</string>
     <string name="error_account_blocked_desc">
         Вы не можете использовать чат, так как заблокирован rox-аккаунт организации, в которую вы пытаетесь обратиться. Попробуйте обратиться позже.

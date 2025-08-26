@@ -1,4 +1,4 @@
-package chat.rox.android.demo.fcm;
+package chat.rox.android.demo.pushes;
 
 import android.app.Activity;
 import android.app.Notification;
@@ -10,87 +10,36 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import android.os.Build;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
-import android.os.Build;
-import android.util.Log;
-import com.google.firebase.messaging.FirebaseMessagingService;
-import com.google.firebase.messaging.RemoteMessage;
 import chat.rox.android.demo.MainActivity;
 import chat.rox.android.demo.R;
 import chat.rox.android.demo.RoxChatActivity;
 import chat.rox.android.sdk.Rox;
 import chat.rox.android.sdk.RoxPushNotification;
+import chat.rox.android.sdk.impl.backend.RoxInternalLog;
 
-public class MyFirebaseMessagingService extends FirebaseMessagingService {
+public class RoxPushSender {
+    private static RoxPushSender INSTANCE;
+    // Change to any number you want
+    private static final int NOTIFICATION_ID = "Rox".hashCode();
 
-    private static final String TAG = "MyFirebaseMsgService";
-    private static final int NOTIFICATION_ID = "Rox".hashCode(); // Change to any number you want
+    private RoxPushSender() {}
 
-    @Override
-    public void onNewToken(@NonNull String s) {
-        super.onNewToken(s);
-    }
-
-    @Override
-    public void onMessageReceived(RemoteMessage remoteMessage) {
-
-        Log.d(TAG, "From: " + remoteMessage.getFrom());
-
-        if (remoteMessage.getData().size() > 0) {
-            Log.d(TAG, "Message data payload: " + remoteMessage.getData());
-            sendNotification(remoteMessage);
-            if (/* Check if data needs to be processed by long running job */ true) {
-                // For long-running tasks (10 seconds or more) use Firebase Job Dispatcher.
-                scheduleJob();
-            } else {
-                // Handle message within 10 seconds
-                handleNow();
-            }
-
-        }
-
-        if (remoteMessage.getNotification() != null) {
-            Log.d(TAG, "Message Notification Body: " + remoteMessage.getNotification().getBody());
-        }
-    }
-
-    /**
-     * Schedule a job using FirebaseJobDispatcher.
-     */
-    private void scheduleJob() {
-
-    }
-
-    /**
-     * Handle time allotted to BroadcastReceivers.
-     */
-    private void handleNow() {
-        Log.d(TAG, "Short lived task is done.");
-    }
-
-    /**
-     * Create and show a simple notification containing the received FCM message.
-     *
-     * @param remoteMessage FCM message body received.
-     */
-    private void sendNotification(RemoteMessage remoteMessage) {
-        onPushMessage(
-            getApplicationContext(),
-            Rox.parseFcmPushNotification(remoteMessage.getData().toString())
-        );
-    }
-
-    private static void onPushMessage(Context context,
-                                      @Nullable RoxPushNotification push) {
+    public void onPushMessage(
+        Context context,
+        @Nullable RoxPushNotification push
+    ) {
         if (push == null) {
             return;
         }
 
         NotificationManager notificationManager =
-                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         String event = push.getEvent();
         if (event.equals("add")) {
             String message = getMessageFromPush(context, push);
@@ -109,8 +58,10 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     }
 
     @Nullable
-    private static String getMessageFromPush(@NonNull Context context,
-                                             @NonNull RoxPushNotification push) {
+    private static String getMessageFromPush(
+        @NonNull Context context,
+        @NonNull RoxPushNotification push
+    ) {
         try {
             String format;
             switch (push.getType()) {
@@ -134,23 +85,27 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             }
 
             return String.format(format, push.getParams().toArray());
-        } catch (Exception ignore) {
+        } catch (Exception exception) {
+            exception.printStackTrace();
+            RoxInternalLog.getInstance().log("Push error: " + exception.getMessage(), Rox.SessionBuilder.RoxLogVerbosityLevel.ERROR);
         }
 
         return null;
     }
 
-    private static void generateNotification(Context context,
-                                             String message,
-                                             NotificationManager notificationManager,
-                                             Class<? extends Activity> cls,
-                                             RoxPushNotification.NotificationType type) {
+    private static void generateNotification(
+        Context context,
+        String message,
+        NotificationManager notificationManager,
+        Class<? extends Activity> cls,
+        RoxPushNotification.NotificationType type
+    ) {
         String channelId = context.getResources().getString(R.string.channel_id);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             CharSequence channelName = context.getResources().getString(R.string.channel_name);
             int importance = NotificationManager.IMPORTANCE_HIGH;
             NotificationChannel notificationChannel = new NotificationChannel(
-                    channelId, channelName, importance);
+                channelId, channelName, importance);
             notificationChannel.enableVibration(true);
             notificationChannel.setShowBadge(true);
             notificationManager.createNotificationChannel(notificationChannel);
@@ -178,5 +133,12 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             .setSound(Uri.parse("android.resource://" + context.getPackageName() + "/" + R.raw.newmessageoperator));
         Notification notification = builder.build();
         notificationManager.notify(NOTIFICATION_ID, notification);
+    }
+
+    public static RoxPushSender getInstance() {
+        if (INSTANCE == null) {
+            INSTANCE = new RoxPushSender();
+        }
+        return INSTANCE;
     }
 }

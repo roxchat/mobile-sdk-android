@@ -4,24 +4,12 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
-import chat.rox.android.sdk.Message;
-import chat.rox.android.sdk.Operator;
-import chat.rox.android.sdk.Survey;
-import chat.rox.android.sdk.UploadedFile;
-import chat.rox.android.sdk.Rox;
-import chat.rox.android.sdk.RoxPushNotification;
-import chat.rox.android.sdk.impl.backend.RoxInternalLog;
-import chat.rox.android.sdk.impl.items.FileItem;
-import chat.rox.android.sdk.impl.items.FileParametersItem;
-import chat.rox.android.sdk.impl.items.KeyboardItem;
-import chat.rox.android.sdk.impl.items.KeyboardRequestItem;
-import chat.rox.android.sdk.impl.items.MessageItem;
-import chat.rox.android.sdk.impl.items.StickerItem;
-import chat.rox.android.sdk.impl.items.SurveyItem;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -37,8 +25,27 @@ import java.util.Map;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
+import chat.rox.android.sdk.Message;
+import chat.rox.android.sdk.Operator;
+import chat.rox.android.sdk.Survey;
+import chat.rox.android.sdk.UploadedFile;
+import chat.rox.android.sdk.Rox;
+import chat.rox.android.sdk.RoxPushNotification;
+import chat.rox.android.sdk.impl.backend.RoxInternalLog;
+import chat.rox.android.sdk.impl.items.FileItem;
+import chat.rox.android.sdk.impl.items.FileParametersItem;
+import chat.rox.android.sdk.impl.items.KeyboardItem;
+import chat.rox.android.sdk.impl.items.KeyboardRequestItem;
+import chat.rox.android.sdk.impl.items.MessageItem;
+import chat.rox.android.sdk.impl.items.StickerItem;
+import chat.rox.android.sdk.impl.items.SurveyItem;
+
 public final class InternalUtils {
-    private static final Gson gson = new Gson();
+    private static final Gson gson = new GsonBuilder()
+        .registerTypeAdapter(Message.FileInfo.class, (JsonDeserializer<Message.FileInfo>) (json, typeOfT, context) -> context.deserialize(json, MessageImpl.FileInfoImpl.class))
+        .registerTypeAdapter(Message.ImageInfo.class, (JsonDeserializer<Message.ImageInfo>) (json, typeOfT, context) -> context.deserialize(json, MessageImpl.ImageInfoImpl.class))
+        .registerTypeAdapter(Message.Attachment.class, (JsonDeserializer<Message.Attachment>) (json, typeOfT, context) -> context.deserialize(json, MessageImpl.AttachmentImpl.class))
+        .create();
 
     public static boolean equals(Object a, Object b) {
         return (a == b) || (a != null && a.equals(b));
@@ -117,6 +124,14 @@ public final class InternalUtils {
         return gson.fromJson(je, cls);
     }
 
+    public static <T> T fromJsonOrNull(String string, Type cls) {
+        try {
+            return gson.fromJson(string, cls);
+        } catch (Throwable throwable) {
+            return null;
+        }
+    }
+
     public static <T extends Comparable<T>> int compare(T x, T y) {
         return x.compareTo(y);
     }
@@ -186,7 +201,8 @@ public final class InternalUtils {
     @Nullable
     public static Message.Attachment getAttachment(
         @NonNull MessageItem messageItem,
-        @NonNull FileUrlCreator fileUrlCreator) {
+        @NonNull FileUrlCreator fileUrlCreator
+    ) {
         if (messageItem.getType() == MessageItem.WMMessageKind.FILE_FROM_VISITOR
                 || messageItem.getType() == MessageItem.WMMessageKind.FILE_FROM_OPERATOR) {
             try {
@@ -195,7 +211,7 @@ public final class InternalUtils {
                 Type mapType = new TypeToken<FileItem>(){}.getType();
                 FileItem fileItem = gson.fromJson(string, mapType);
                 return (fileItem != null)
-                    ? getAttachment(fileItem.getFile(), fileUrlCreator)
+                    ? getAttachment(fileItem, fileUrlCreator)
                     : getAttachment(messageItem.getMessage(), fileUrlCreator);
             } catch (Exception e) {
                 RoxInternalLog.getInstance().log(
@@ -214,21 +230,38 @@ public final class InternalUtils {
         return null;
     }
 
+    public static Message.Attachment failedAttachment(Message.Attachment attachment) {
+        return new MessageImpl.AttachmentImpl(
+            attachment.getDownloadProgress(),
+            attachment.getErrorMessage(),
+            attachment.getVisitorErrorMessage(),
+            attachment.getErrorType(),
+            attachment.getFileInfo(),
+            attachment.getFilesInfo(),
+            attachment.getExtraText(),
+            Message.Attachment.AttachmentState.ERROR
+        );
+    }
+
     @Nullable
     private static Message.Attachment getAttachment(
-        @Nullable FileItem.File file,
-        @NonNull FileUrlCreator fileUrlCreator) {
+        @NonNull FileItem fileItem,
+        @NonNull FileUrlCreator fileUrlCreator
+    ) {
+        FileItem.File file = fileItem.getFile();
         if (file != null) {
             Message.FileInfo fileInfo = getFileInfo(file, fileUrlCreator);
             List<Message.FileInfo> filesInfo = new ArrayList<>();
             filesInfo.add(fileInfo);
             return new MessageImpl.AttachmentImpl(
-                    file.getDownloadProgress(),
-                    file.getErrorType(),
-                    file.getErrorMessage(),
-                    fileInfo,
-                    filesInfo,
-                    getFileState(file.getState()));
+                file.getDownloadProgress(),
+                file.getErrorType(),
+                file.getErrorMessage(),
+                file.getVisitorErrorMessage(),
+                fileInfo,
+                filesInfo,
+                fileItem.getExtraText(),
+                getFileState(file.getState()));
         } else {
             return null;
         }
@@ -237,7 +270,8 @@ public final class InternalUtils {
     @NonNull
     private static Message.Attachment getAttachment(
         @NonNull String message,
-        @NonNull FileUrlCreator fileUrlCreator) throws JSONException {
+        @NonNull FileUrlCreator fileUrlCreator
+    ) throws JSONException {
         List<Message.FileInfo> filesInfo = new ArrayList<>();
         Message.FileInfo fileInfo;
         Boolean messageIsArray = new JsonParser().parse(message).isJsonArray();
@@ -253,30 +287,37 @@ public final class InternalUtils {
             filesInfo.add(fileInfo);
         }
         return new MessageImpl.AttachmentImpl(
-                100,
-                "",
-                "",
-                fileInfo,
-                filesInfo,
-                Message.Attachment.AttachmentState.READY);
+            100,
+            "",
+            "",
+            "",
+            fileInfo,
+            filesInfo,
+            null,
+            Message.Attachment.AttachmentState.READY
+        );
     }
 
     @NonNull
     private static Message.FileInfo getFileInfo(
         @NonNull FileItem.File file,
-        @NonNull FileUrlCreator fileUrlCreator) {
+        @NonNull FileUrlCreator fileUrlCreator
+    ) {
         FileParametersItem fileParams = file.getProperties();
         if (file.getState() == FileItem.File.FileState.READY) {
             return getFileInfoImpl(fileParams, fileUrlCreator);
         } else {
+            boolean cannotGenerateUrl = fileParams == null || fileParams.getFilename() == null || fileParams.getGuid() == null;
             return new MessageImpl.FileInfoImpl(
-                    "",
-                    (fileParams != null) ? fileParams.getFilename() : "",
-                    null,
-                    0,
-                    null,
-                    fileParams != null ? fileParams.getGuid() : "",
-                    fileUrlCreator);
+                "",
+                (fileParams != null) ? fileParams.getFilename() : "",
+                null,
+                0,
+                cannotGenerateUrl ? null : fileUrlCreator.createFileUrl(fileParams.getFilename(), fileParams.getGuid(), false),
+                fileParams != null ? fileParams.getGuid() : "",
+                null,
+                fileParams == null ? null : fileUrlCreator
+            );
         }
     }
 
@@ -290,7 +331,8 @@ public final class InternalUtils {
     @NonNull
     private static MessageImpl.FileInfoImpl getFileInfoImpl(
         @NonNull FileParametersItem fileParams,
-        @NonNull FileUrlCreator fileUrlCreator) {
+        @NonNull FileUrlCreator fileUrlCreator
+    ) {
         String fileUrl = fileUrlCreator.createFileUrl(fileParams.getFilename(), fileParams.getGuid(), false);
         return new MessageImpl.FileInfoImpl(
             fileParams.getContentType(),
@@ -299,7 +341,9 @@ public final class InternalUtils {
             fileParams.getSize(),
             fileUrl,
             fileParams.getGuid(),
-            fileUrlCreator);
+            null,
+            fileUrlCreator
+        );
     }
 
     @NonNull
@@ -527,6 +571,25 @@ public final class InternalUtils {
         return new MessageImpl.ParamsImpl(type, params.getAction(), params.getColor());
     }
 
+    public static Message.Quote getQuote(
+        String quotedMessageId,
+        Message.Type quoteType,
+        String quoteSenderName,
+        String quoteText
+    ) {
+        return new MessageImpl.QuoteImpl(
+            null,
+            quotedMessageId,
+            null,
+            quoteType,
+            quoteSenderName,
+            Message.Quote.State.PENDING,
+            quoteText,
+            0
+        );
+    }
+
+
     @Nullable
     public static Message.Quote getQuote(
         @Nullable MessageItem.Quote quote,
@@ -579,7 +642,8 @@ public final class InternalUtils {
 
     private static Message.FileInfo extractFileInfo(
         @NonNull MessageItem.Quote.QuotedMessage quotedMessage,
-        @NonNull FileUrlCreator fileUrlCreator) {
+        @NonNull FileUrlCreator fileUrlCreator
+    ) {
         MessageItem messageItem = new MessageItem();
         messageItem.setMessage(percentDecode(quotedMessage.getText()));
         messageItem.setType(quotedMessage.getKind());
@@ -588,13 +652,14 @@ public final class InternalUtils {
         if (attachment != null) {
             MessageImpl.FileInfoImpl fileInfo = (MessageImpl.FileInfoImpl) attachment.getFileInfo();
             return new MessageImpl.FileInfoImpl(
-                    fileInfo.getContentType(),
-                    fileInfo.getFileName(),
-                    fileInfo.getImageInfo(),
-                    fileInfo.getSize(),
-                    fileInfo.getUrl(),
-                    fileInfo.getGuid(),
-                    fileUrlCreator
+                fileInfo.getContentType(),
+                fileInfo.getFileName(),
+                fileInfo.getImageInfo(),
+                fileInfo.getSize(),
+                fileInfo.getUrl(),
+                fileInfo.getGuid(),
+                null,
+                fileUrlCreator
             );
         } else {
             return null;
@@ -627,6 +692,10 @@ public final class InternalUtils {
             default:
                 return SurveyImpl.Question.Type.COMMENT;
         }
+    }
+
+    public static String toMultiFilesSendString(List<Message.FileInfo> fileInfos) {
+        return convertToString(fileInfos);
     }
 
     public static boolean isValidJson(String jsonResponse) {

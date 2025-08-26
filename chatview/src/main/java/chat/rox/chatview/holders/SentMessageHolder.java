@@ -1,13 +1,15 @@
 package chat.rox.chatview.holders;
 
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 
 import chat.rox.android.sdk.Message;
 import chat.rox.chatview.R;
 
 public class SentMessageHolder extends FileMessageHolder {
-    ProgressBar sendingProgress;
+    private ProgressBar sendingProgress;
+    private ImageView failedIcon;
 
     public SentMessageHolder(final View itemView, ChatHolderActions holderActions) {
         super(itemView, holderActions);
@@ -17,6 +19,7 @@ public class SentMessageHolder extends FileMessageHolder {
         selectedColor = R.color.sending_msg_select;
 
         sendingProgress = itemView.findViewById(R.id.sending_msg);
+        failedIcon = itemView.findViewById(R.id.error);
     }
 
     @Override
@@ -24,11 +27,15 @@ public class SentMessageHolder extends FileMessageHolder {
         super.bind(message, showDate);
 
         boolean sending = message.getSendStatus() == Message.SendStatus.SENDING;
+        boolean failed = message.getSendStatus() == Message.SendStatus.FAILED;
         if (messageTime != null) {
             messageTime.setVisibility(sending ? View.GONE : View.VISIBLE);
         }
         if (sendingProgress != null) {
             sendingProgress.setVisibility(sending ? View.VISIBLE : View.GONE);
+        }
+        if (failedIcon != null) {
+            failedIcon.setVisibility(failed ? View.VISIBLE : View.GONE);
         }
     }
 }

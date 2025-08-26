@@ -122,5 +122,8 @@
 
     <string name="cannot_open_file">Cannot find an app for opening the file</string>
     <string name="prefs_testers_title">For testers</string>
-    <string name="prefs_use_chat_view">Использовать ChatView</string>
+    <string name="prefs_use_chat_view">Use ChatView</string>
+
+    <string name="reset_visitor_title">Update user</string>
+    <string name="reset_visitor_toast">User data cleared</string>
 </resources>

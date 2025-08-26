@@ -12,9 +12,11 @@ import chat.rox.android.sdk.FAQItem;
 import chat.rox.android.sdk.FAQSearchItem;
 import chat.rox.android.sdk.FAQStructure;
 import chat.rox.android.sdk.NotFatalErrorHandler;
+import chat.rox.android.sdk.Rox;
 import chat.rox.android.sdk.impl.backend.FAQClient;
 import chat.rox.android.sdk.impl.backend.FAQClientBuilder;
 import chat.rox.android.sdk.impl.backend.InternalErrorListener;
+import chat.rox.android.sdk.impl.backend.RoxInternalLog;
 import chat.rox.android.sdk.impl.items.FAQItemItem;
 
 import java.util.ArrayList;
@@ -323,7 +325,10 @@ public class FAQImpl implements FAQ {
                         "Created on: " + thread + ", current thread: " + Thread.currentThread());
             }
             if (destroyer.isDestroyed()) {
-                throw new IllegalStateException("Can't use destroyed session");
+                RoxInternalLog.getInstance().log(
+                    "RoxSession is already destroyed",
+                    Rox.SessionBuilder.RoxLogVerbosityLevel.ERROR
+                );
             }
         }
     }

@@ -33,6 +33,7 @@ public class AnchorMenuDialog extends Dialog {
     private ConfigurationChangedListener configurationChangedListener;
     private boolean cancelable = true;
     private int gravity = Gravity.NO_GRAVITY;
+    private float disableOpacity = 1.0f;
 
     public AnchorMenuDialog(@NonNull Context context) {
         this(context, 0);
@@ -51,6 +52,14 @@ public class AnchorMenuDialog extends Dialog {
 
     public boolean isCancelable() {
         return cancelable;
+    }
+
+    public float getDisableOpacity() {
+        return disableOpacity;
+    }
+
+    public void setDisableOpacity(float disableOpacity) {
+        this.disableOpacity = disableOpacity;
     }
 
     @Override
@@ -124,19 +133,24 @@ public class AnchorMenuDialog extends Dialog {
     public void enableItem(int itemId, boolean enabled) {
         View view = itemToViewMap.get(itemId);
         if (view != null) {
+            view.setAlpha(enabled ? 1.0f : disableOpacity);
             view.setEnabled(enabled);
         }
     }
 
     public void enableItems() {
         for (Map.Entry<Integer, View> entry : itemToViewMap.entrySet()) {
+            View view = entry.getValue();
+            view.setAlpha(1.0f);
             entry.getValue().setEnabled(true);
         }
     }
 
     public void disableItems() {
         for (Map.Entry<Integer, View> entry : itemToViewMap.entrySet()) {
-            entry.getValue().setEnabled(false);
+            View view = entry.getValue();
+            view.setAlpha(disableOpacity);
+            view.setEnabled(false);
         }
     }
 

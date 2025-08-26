@@ -11,6 +11,8 @@ public class RoxInternalError {
 	public static final String FILE_SIZE_EXCEEDED = "max_file_size_exceeded";
 	public static final String FILE_SIZE_TOO_SMALL = "file_size_too_small";
 	public static final String FILE_TYPE_NOT_ALLOWED = "not_allowed_file_type";
+	public static final String MALICIOUS_FILE_DETECTED = "malicious_file_detected";
+
 	public static final String NOT_ALLOWED_MIME_TYPE = "not_allowed_mime_type";
 	public static final String NO_PREVIOUS_CHATS = "no_previous_chats";
 	public static final String NO_STICKER_ID = "no-sticker-id";
@@ -60,6 +62,11 @@ public class RoxInternalError {
 	public static final String OPERATOR_NOT_IN_CHAT = "operator-not-in-chat";
 	public static final String OPERATOR_ALREADY_RATED = "operator-already-rated";
 	public static final String NOTE_IS_TOO_LONG = "note-is-too-long";
+	public static final String RATE_DISABLED = "rate-disabled";
+	public static final String RESOLUTION_SURVEY_VALUE_INCORRECT = "resolution-survey-value-incorrect";
+	public static final String RESOLUTION_RATE_FORM_MISMATCH = "rate-form-mismatch";
+	public static final String RESOLUTION_VISITOR_SEGMENT_MISMATCH = "visitor-segment-mismatch";
+	public static final String RESOLUTION_RATED_ENTITY_MISMATCH = "rated-entity-mismatch";
 
 	//Errors for sending keyboard
 	public static final String BUTTON_ID_NO_SET = "button-id-not-set";

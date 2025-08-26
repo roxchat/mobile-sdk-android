@@ -1,6 +1,5 @@
 plugins {
     id("com.android.library")
-    id("maven-publish")
     id("signing")
     id("org.jetbrains.kotlin.android")
 }
@@ -13,13 +12,11 @@ repositories {
 val versionName = project.property("chatviewVersionName").toString()
 
 android {
-    namespace = "chat.rox.chatview"
-
-    compileSdk = 33
-
+    compileSdk = 35
     defaultConfig {
         minSdk = 21
-        targetSdk = 33
+        testOptions.targetSdk = 35
+        namespace = "chat.rox.chatview"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
@@ -52,7 +49,7 @@ java {
 }
 
 dependencies {
-    api(project(":roxclientsdkandroid"))
+    api(project(":roxchatsdkandroid"))
     implementation("androidx.core:core-ktx:1.9.0")
     implementation("com.github.bumptech.glide:glide:4.15.1")
     annotationProcessor("com.github.bumptech.glide:compiler:4.15.1")

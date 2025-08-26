@@ -17,6 +17,7 @@ import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.Fragment;
 
+import chat.rox.android.demo.util.AndroidUtils;
 import chat.rox.android.sdk.RoxSession;
 
 public class MainFragment extends Fragment {
@@ -53,12 +54,23 @@ public class MainFragment extends Fragment {
 
         View rootView = inflater.inflate(R.layout.fragment_main, container, false);
 
+        initTextInfo(rootView);
         initNewChatButton(rootView);
         initViewForBadge(rootView);
         initSettingButton(rootView);
         initCounter(rootView);
 
         return rootView;
+    }
+
+    private void initTextInfo(View rootView) {
+        ViewGroup roxInfoGroup = rootView.findViewById(R.id.roxInfo);
+        for (int i = 0; i < roxInfoGroup.getChildCount(); i++) {
+            View child = roxInfoGroup.getChildAt(i);
+            if (child instanceof TextView) {
+                AndroidUtils.stripUnderlines(((TextView) child));
+            }
+        }
     }
 
     public void setRoxSession(RoxSession roxSession) {
